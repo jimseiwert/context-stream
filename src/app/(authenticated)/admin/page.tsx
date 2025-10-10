@@ -1,47 +1,55 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+export const dynamic = "force-dynamic";
+
+import { Badge } from "@/components/ui/badge";
 import {
-  Users,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { apiClient } from "@/lib/api-client";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Activity,
+  Clock,
   Database,
   Globe,
   TrendingUp,
-  Activity,
-  Clock,
-} from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
-import { apiClient } from "@/lib/api-client"
+  Users,
+} from "lucide-react";
 
 interface AdminStats {
-  totalUsers: number
-  totalSources: number
-  globalSources: number
-  workspaceSources: number
-  totalPages: number
-  totalQueries: number
-  activeUsers: number
+  totalUsers: number;
+  totalSources: number;
+  globalSources: number;
+  workspaceSources: number;
+  totalPages: number;
+  totalQueries: number;
+  activeUsers: number;
   recentActivity: Array<{
-    id: string
-    type: string
-    description: string
-    timestamp: string
+    id: string;
+    type: string;
+    description: string;
+    timestamp: string;
     user: {
-      name: string
-      email: string
-    }
-  }>
+      name: string;
+      email: string;
+    };
+  }>;
 }
 
 export default function AdminDashboardPage() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ["admin-stats"],
     queryFn: async () => {
-      const response = await apiClient.get<AdminStats>("/api/admin/stats")
-      return response
+      const response = await apiClient.get<AdminStats>("/api/admin/stats");
+      return response;
     },
-  })
+  });
 
   if (isLoading) {
     return (
@@ -55,7 +63,7 @@ export default function AdminDashboardPage() {
         </div>
         <Skeleton className="h-64" />
       </div>
-    )
+    );
   }
 
   const statCards = [
@@ -70,7 +78,9 @@ export default function AdminDashboardPage() {
       title: "Total Sources",
       value: stats?.totalSources || 0,
       icon: Database,
-      description: `${stats?.globalSources || 0} global, ${stats?.workspaceSources || 0} workspace`,
+      description: `${stats?.globalSources || 0} global, ${
+        stats?.workspaceSources || 0
+      } workspace`,
       color: "text-green-600",
     },
     {
@@ -87,7 +97,7 @@ export default function AdminDashboardPage() {
       description: "All time",
       color: "text-orange-600",
     },
-  ]
+  ];
 
   return (
     <div className="space-y-6">
@@ -102,7 +112,7 @@ export default function AdminDashboardPage() {
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat) => {
-          const Icon = stat.icon
+          const Icon = stat.icon;
           return (
             <Card key={stat.title}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -118,7 +128,7 @@ export default function AdminDashboardPage() {
                 </p>
               </CardContent>
             </Card>
-          )
+          );
         })}
       </div>
 
@@ -144,11 +154,15 @@ export default function AdminDashboardPage() {
                   <div className="flex-1">
                     <div className="flex items-center space-x-2">
                       <Badge variant="outline">{activity.type}</Badge>
-                      <p className="text-sm font-medium">{activity.description}</p>
+                      <p className="text-sm font-medium">
+                        {activity.description}
+                      </p>
                     </div>
                     <div className="flex items-center space-x-2 mt-1 text-xs text-muted-foreground">
                       <Clock className="h-3 w-3" />
-                      <span>{new Date(activity.timestamp).toLocaleString()}</span>
+                      <span>
+                        {new Date(activity.timestamp).toLocaleString()}
+                      </span>
                       <span>·</span>
                       <span>{activity.user.name}</span>
                       <span>({activity.user.email})</span>
@@ -204,7 +218,9 @@ export default function AdminDashboardPage() {
               <span className="text-sm font-medium">Activity Rate</span>
               <Badge>
                 {stats?.totalUsers
-                  ? Math.round(((stats.activeUsers || 0) / stats.totalUsers) * 100)
+                  ? Math.round(
+                      ((stats.activeUsers || 0) / stats.totalUsers) * 100
+                    )
                   : 0}
                 %
               </Badge>
@@ -213,5 +229,5 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

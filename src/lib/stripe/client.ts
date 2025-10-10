@@ -1,29 +1,29 @@
 // Stripe Client Wrapper
 // Handles all Stripe API interactions
 
-import Stripe from 'stripe'
-import { PlanTier } from '@prisma/client'
-import { PLANS } from '../subscriptions/plans'
+import { PlanTier } from "@prisma/client";
+import Stripe from "stripe";
+import { PLANS } from "../subscriptions/plans";
 
 if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing STRIPE_SECRET_KEY environment variable')
+  throw new Error("Missing STRIPE_SECRET_KEY environment variable");
 }
 
 // Initialize Stripe client
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: "2025-09-30.clover",
   typescript: true,
-})
+});
 
 /**
  * Create a Stripe customer for a user
  */
 export async function createStripeCustomer(params: {
-  userId: string
-  email: string
-  name: string
+  userId: string;
+  email: string;
+  name: string;
 }): Promise<string> {
-  const { userId, email, name } = params
+  const { userId, email, name } = params;
 
   const customer = await stripe.customers.create({
     email,
@@ -31,27 +31,27 @@ export async function createStripeCustomer(params: {
     metadata: {
       userId,
     },
-  })
+  });
 
-  return customer.id
+  return customer.id;
 }
 
 /**
  * Create a checkout session for subscription
  */
 export async function createCheckoutSession(params: {
-  customerId: string
-  priceId: string
-  successUrl: string
-  cancelUrl: string
-  userId: string
+  customerId: string;
+  priceId: string;
+  successUrl: string;
+  cancelUrl: string;
+  userId: string;
 }): Promise<Stripe.Checkout.Session> {
-  const { customerId, priceId, successUrl, cancelUrl, userId } = params
+  const { customerId, priceId, successUrl, cancelUrl, userId } = params;
 
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
-    mode: 'subscription',
-    payment_method_types: ['card'],
+    mode: "subscription",
+    payment_method_types: ["card"],
     line_items: [
       {
         price: priceId,
@@ -68,26 +68,26 @@ export async function createCheckoutSession(params: {
         userId,
       },
     },
-  })
+  });
 
-  return session
+  return session;
 }
 
 /**
  * Create a billing portal session
  */
 export async function createBillingPortalSession(params: {
-  customerId: string
-  returnUrl: string
+  customerId: string;
+  returnUrl: string;
 }): Promise<Stripe.BillingPortal.Session> {
-  const { customerId, returnUrl } = params
+  const { customerId, returnUrl } = params;
 
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
     return_url: returnUrl,
-  })
+  });
 
-  return session
+  return session;
 }
 
 /**
@@ -97,11 +97,11 @@ export async function getSubscription(
   subscriptionId: string
 ): Promise<Stripe.Subscription | null> {
   try {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-    return subscription
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    return subscription;
   } catch (error) {
-    console.error('Failed to retrieve subscription:', error)
-    return null
+    console.error("Failed to retrieve subscription:", error);
+    return null;
   }
 }
 
@@ -113,9 +113,9 @@ export async function cancelSubscription(
 ): Promise<Stripe.Subscription> {
   const subscription = await stripe.subscriptions.update(subscriptionId, {
     cancel_at_period_end: true,
-  })
+  });
 
-  return subscription
+  return subscription;
 }
 
 /**
@@ -126,22 +126,22 @@ export async function resumeSubscription(
 ): Promise<Stripe.Subscription> {
   const subscription = await stripe.subscriptions.update(subscriptionId, {
     cancel_at_period_end: false,
-  })
+  });
 
-  return subscription
+  return subscription;
 }
 
 /**
  * Update subscription to a new plan
  */
 export async function updateSubscriptionPlan(params: {
-  subscriptionId: string
-  newPriceId: string
+  subscriptionId: string;
+  newPriceId: string;
 }): Promise<Stripe.Subscription> {
-  const { subscriptionId, newPriceId } = params
+  const { subscriptionId, newPriceId } = params;
 
   // Get current subscription
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
   // Update subscription with new price
   const updated = await stripe.subscriptions.update(subscriptionId, {
@@ -151,10 +151,10 @@ export async function updateSubscriptionPlan(params: {
         price: newPriceId,
       },
     ],
-    proration_behavior: 'always_invoice',
-  })
+    proration_behavior: "always_invoice",
+  });
 
-  return updated
+  return updated;
 }
 
 /**
@@ -164,13 +164,13 @@ export async function getUpcomingInvoice(
   customerId: string
 ): Promise<Stripe.Invoice | null> {
   try {
-    const invoice = await stripe.invoices.retrieveUpcoming({
+    const invoice = await (stripe.invoices as any).retrieveUpcoming({
       customer: customerId,
-    })
-    return invoice
+    });
+    return invoice;
   } catch (error) {
-    console.error('Failed to retrieve upcoming invoice:', error)
-    return null
+    console.error("Failed to retrieve upcoming invoice:", error);
+    return null;
   }
 }
 
@@ -184,17 +184,17 @@ export async function listInvoices(
   const invoices = await stripe.invoices.list({
     customer: customerId,
     limit,
-  })
+  });
 
-  return invoices.data
+  return invoices.data;
 }
 
 /**
  * Get price ID for a plan tier
  */
 export function getPriceId(planTier: PlanTier): string | undefined {
-  const plan = PLANS[planTier]
-  return plan.stripePriceId
+  const plan = PLANS[planTier];
+  return plan.stripePriceId;
 }
 
 /**
@@ -204,11 +204,11 @@ export function verifyWebhookSignature(
   payload: string | Buffer,
   signature: string
 ): Stripe.Event {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    throw new Error('Missing STRIPE_WEBHOOK_SECRET environment variable')
+    throw new Error("Missing STRIPE_WEBHOOK_SECRET environment variable");
   }
 
-  return stripe.webhooks.constructEvent(payload, signature, webhookSecret)
+  return stripe.webhooks.constructEvent(payload, signature, webhookSecret);
 }

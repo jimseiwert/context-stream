@@ -1,17 +1,17 @@
 // Page Management Queries
 // Handles all database operations for Pages and their content
 
-import { prisma } from '@/lib/db'
-import { Prisma } from '@prisma/client'
-import { createHash } from 'crypto'
+import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
+import { createHash } from "crypto";
 
 export interface CreatePageParams {
-  sourceId: string
-  url: string
-  title: string | null
-  contentText: string
-  contentHtml: string | null
-  metadata?: Prisma.JsonValue
+  sourceId: string;
+  url: string;
+  title: string | null;
+  contentText: string;
+  contentHtml: string | null;
+  metadata?: Prisma.JsonValue;
 }
 
 /**
@@ -19,7 +19,9 @@ export interface CreatePageParams {
  */
 export async function upsertPage(params: CreatePageParams) {
   // Generate checksum for content
-  const checksum = createHash('sha256').update(params.contentText).digest('hex')
+  const checksum = createHash("sha256")
+    .update(params.contentText)
+    .digest("hex");
 
   // Check if page exists
   const existing = await prisma.page.findUnique({
@@ -30,11 +32,11 @@ export async function upsertPage(params: CreatePageParams) {
       },
     },
     select: { id: true, checksum: true },
-  })
+  });
 
   // If content hasn't changed, skip update
   if (existing && existing.checksum === checksum) {
-    return { page: existing, updated: false }
+    return { page: existing, updated: false };
   }
 
   const page = await prisma.page.upsert({
@@ -50,20 +52,20 @@ export async function upsertPage(params: CreatePageParams) {
       title: params.title,
       contentText: params.contentText,
       contentHtml: params.contentHtml,
-      metadata: params.metadata,
+      metadata: params.metadata as Prisma.InputJsonValue,
       checksum,
     },
     update: {
       title: params.title,
       contentText: params.contentText,
       contentHtml: params.contentHtml,
-      metadata: params.metadata,
+      metadata: params.metadata as Prisma.InputJsonValue,
       checksum,
       updatedAt: new Date(),
     },
-  })
+  });
 
-  return { page, updated: !!existing }
+  return { page, updated: !!existing };
 }
 
 /**
@@ -82,7 +84,7 @@ export async function getPageById(pageId: string) {
         },
       },
       chunks: {
-        orderBy: { chunkIndex: 'asc' },
+        orderBy: { chunkIndex: "asc" },
         select: {
           id: true,
           chunkIndex: true,
@@ -91,7 +93,7 @@ export async function getPageById(pageId: string) {
         },
       },
     },
-  })
+  });
 }
 
 /**
@@ -101,7 +103,7 @@ export async function getPagesBySource(
   sourceId: string,
   params: { limit?: number; offset?: number } = {}
 ) {
-  const { limit = 50, offset = 0 } = params
+  const { limit = 50, offset = 0 } = params;
 
   const [pages, total] = await prisma.$transaction([
     prisma.page.findMany({
@@ -116,16 +118,16 @@ export async function getPagesBySource(
           select: { chunks: true },
         },
       },
-      orderBy: { indexedAt: 'desc' },
+      orderBy: { indexedAt: "desc" },
       skip: offset,
       take: limit,
     }),
     prisma.page.count({
       where: { sourceId },
     }),
-  ])
+  ]);
 
-  return { pages, total }
+  return { pages, total };
 }
 
 /**
@@ -139,11 +141,11 @@ export async function searchPages(
   // Use PostgreSQL full-text search
   const pages = await prisma.$queryRaw<
     Array<{
-      id: string
-      title: string | null
-      url: string
-      source_id: string
-      rank: number
+      id: string;
+      title: string | null;
+      url: string;
+      source_id: string;
+      rank: number;
     }>
   >`
     SELECT
@@ -160,9 +162,9 @@ export async function searchPages(
       AND to_tsvector('english', p."contentText") @@ plainto_tsquery('english', ${query})
     ORDER BY rank DESC
     LIMIT ${limit}
-  `
+  `;
 
-  return pages
+  return pages;
 }
 
 /**
@@ -171,7 +173,7 @@ export async function searchPages(
 export async function deletePagesBySource(sourceId: string) {
   return prisma.page.deleteMany({
     where: { sourceId },
-  })
+  });
 }
 
 /**
@@ -180,7 +182,7 @@ export async function deletePagesBySource(sourceId: string) {
 export async function deletePage(pageId: string) {
   return prisma.page.delete({
     where: { id: pageId },
-  })
+  });
 }
 
 /**
@@ -192,14 +194,14 @@ export async function getSourcePageStats(sourceId: string) {
     _count: true,
     _min: { indexedAt: true },
     _max: { indexedAt: true, updatedAt: true },
-  })
+  });
 
   return {
     totalPages: stats._count,
     firstIndexed: stats._min.indexedAt,
     lastIndexed: stats._max.indexedAt,
     lastUpdated: stats._max.updatedAt,
-  }
+  };
 }
 
 /**
@@ -213,24 +215,21 @@ export async function batchCreatePages(pages: CreatePageParams[]) {
     contentText: page.contentText,
     contentHtml: page.contentHtml,
     metadata: page.metadata || Prisma.JsonNull,
-    checksum: createHash('sha256').update(page.contentText).digest('hex'),
-  }))
+    checksum: createHash("sha256").update(page.contentText).digest("hex"),
+  }));
 
   // Use createMany for bulk insert
   // Note: This will skip existing pages (no update)
   return prisma.page.createMany({
     data,
     skipDuplicates: true,
-  })
+  });
 }
 
 /**
  * Find outdated pages (for incremental updates)
  */
-export async function findOutdatedPages(
-  sourceId: string,
-  olderThan: Date
-) {
+export async function findOutdatedPages(sourceId: string, olderThan: Date) {
   return prisma.page.findMany({
     where: {
       sourceId,
@@ -241,5 +240,5 @@ export async function findOutdatedPages(
       url: true,
       checksum: true,
     },
-  })
+  });
 }

@@ -1,31 +1,31 @@
 // Source Management Queries
 // Handles all database operations for Sources with Global Source Architecture
 
-import { prisma } from '@/lib/db'
-import { Prisma, SourceScope, SourceStatus, SourceType } from '@prisma/client'
+import { prisma } from "@/lib/db";
+import { Prisma, SourceScope, SourceStatus, SourceType } from "@prisma/client";
 
 export interface GetWorkspaceSourcesParams {
-  userId: string
-  workspaceId?: string
-  status?: SourceStatus
-  scope?: SourceScope
-  limit: number
-  offset: number
+  userId: string;
+  workspaceId?: string;
+  status?: SourceStatus;
+  scope?: SourceScope;
+  limit: number;
+  offset: number;
 }
 
 export interface CreateSourceParams {
-  url: string
-  domain: string
-  type: SourceType
-  scope: SourceScope
-  config?: Prisma.JsonValue
-  createdById: string
+  url: string;
+  domain: string;
+  type: SourceType;
+  scope: SourceScope;
+  config?: Prisma.JsonValue;
+  createdById: string;
 }
 
 export interface PromoteSourceParams {
-  sourceId: string
-  adminId: string
-  reason?: string
+  sourceId: string;
+  adminId: string;
+  reason?: string;
 }
 
 /**
@@ -33,22 +33,24 @@ export interface PromoteSourceParams {
  * Includes both global sources and workspace-specific sources
  */
 export async function getWorkspaceSources(params: GetWorkspaceSourcesParams) {
-  const { userId, workspaceId, status, scope, limit, offset } = params
+  const { userId, workspaceId, status, scope, limit, offset } = params;
 
   // Get user's workspaces
   const workspaces = await prisma.workspace.findMany({
     where: { ownerId: userId },
     select: { id: true },
-  })
+  });
 
-  const workspaceIds = workspaceId ? [workspaceId] : workspaces.map((w) => w.id)
+  const workspaceIds = workspaceId
+    ? [workspaceId]
+    : workspaces.map((w) => w.id);
 
   // Build where clause for sources
   const where: Prisma.SourceWhereInput = {
     OR: [
       // Global sources (available to all)
       {
-        scope: 'GLOBAL',
+        scope: "GLOBAL",
         ...(status && { status }),
       },
       // Workspace-specific sources
@@ -60,7 +62,7 @@ export async function getWorkspaceSources(params: GetWorkspaceSourcesParams) {
       },
     ],
     ...(scope && { scope }),
-  }
+  };
 
   // Execute query with pagination
   const [sources, total] = await prisma.$transaction([
@@ -74,14 +76,14 @@ export async function getWorkspaceSources(params: GetWorkspaceSourcesParams) {
         },
         usageStats: true,
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
       skip: offset,
       take: limit,
     }),
     prisma.source.count({ where }),
-  ])
+  ]);
 
-  return { sources, total }
+  return { sources, total };
 }
 
 /**
@@ -111,7 +113,7 @@ export async function getSourceById(sourceId: string) {
       usageStats: true,
       pages: {
         take: 10,
-        orderBy: { indexedAt: 'desc' },
+        orderBy: { indexedAt: "desc" },
         select: {
           id: true,
           url: true,
@@ -120,7 +122,7 @@ export async function getSourceById(sourceId: string) {
         },
       },
     },
-  })
+  });
 }
 
 /**
@@ -140,7 +142,7 @@ export async function findSourceByUrl(url: string) {
         select: { workspaceSources: true },
       },
     },
-  })
+  });
 }
 
 /**
@@ -153,11 +155,11 @@ export async function createSource(params: CreateSourceParams) {
       domain: params.domain,
       type: params.type,
       scope: params.scope,
-      config: params.config,
-      status: 'PENDING',
+      config: params.config as Prisma.InputJsonValue,
+      status: "PENDING",
       createdById: params.createdById,
     },
-  })
+  });
 }
 
 /**
@@ -174,9 +176,9 @@ export async function linkSourceToWorkspace(
       sourceId,
       workspaceId,
       addedBy,
-      customConfig,
+      customConfig: customConfig as Prisma.InputJsonValue,
     },
-  })
+  });
 }
 
 /**
@@ -192,26 +194,26 @@ export async function updateSourceStatus(
     data: {
       status,
       errorMessage,
-      ...(status === 'ACTIVE' && {
+      ...(status === "ACTIVE" && {
         lastScrapedAt: new Date(),
         lastUpdatedAt: new Date(),
       }),
     },
-  })
+  });
 }
 
 /**
  * Promote a workspace source to global
  */
 export async function promoteSourceToGlobal(params: PromoteSourceParams) {
-  const { sourceId, adminId, reason } = params
+  const { sourceId, adminId, reason } = params;
 
   return prisma.$transaction(async (tx) => {
     // Update source scope
     const updated = await tx.source.update({
       where: { id: sourceId },
       data: {
-        scope: 'GLOBAL',
+        scope: "GLOBAL",
         promotedToGlobalAt: new Date(),
         promotedById: adminId,
       },
@@ -219,20 +221,20 @@ export async function promoteSourceToGlobal(params: PromoteSourceParams) {
         workspaceSources: true,
         pages: { select: { id: true } },
       },
-    })
+    });
 
     // Create audit log
     await tx.auditLog.create({
       data: {
         userId: adminId,
-        action: 'PROMOTE_SOURCE',
-        entityType: 'SOURCE',
+        action: "PROMOTE_SOURCE",
+        entityType: "SOURCE",
         entityId: sourceId,
-        before: { scope: 'WORKSPACE' },
-        after: { scope: 'GLOBAL' },
+        before: { scope: "WORKSPACE" },
+        after: { scope: "GLOBAL" },
         reason,
       },
-    })
+    });
 
     // Update usage stats
     await tx.sourceUsageStats.upsert({
@@ -245,10 +247,10 @@ export async function promoteSourceToGlobal(params: PromoteSourceParams) {
         workspaceCount: updated.workspaceSources.length,
         calculatedAt: new Date(),
       },
-    })
+    });
 
-    return updated
-  })
+    return updated;
+  });
 }
 
 /**
@@ -267,33 +269,33 @@ export async function demoteSourceToWorkspace(
         sourceId,
         workspaceId: { not: targetWorkspaceId },
       },
-    })
+    });
 
     // Update source scope
     const updated = await tx.source.update({
       where: { id: sourceId },
       data: {
-        scope: 'WORKSPACE',
+        scope: "WORKSPACE",
         promotedToGlobalAt: null,
         promotedById: null,
       },
-    })
+    });
 
     // Create audit log
     await tx.auditLog.create({
       data: {
         userId: adminId,
-        action: 'DEMOTE_SOURCE',
-        entityType: 'SOURCE',
+        action: "DEMOTE_SOURCE",
+        entityType: "SOURCE",
         entityId: sourceId,
-        before: { scope: 'GLOBAL' },
-        after: { scope: 'WORKSPACE', workspaceId: targetWorkspaceId },
+        before: { scope: "GLOBAL" },
+        after: { scope: "WORKSPACE", workspaceId: targetWorkspaceId },
         reason,
       },
-    })
+    });
 
-    return updated
-  })
+    return updated;
+  });
 }
 
 /**
@@ -304,31 +306,31 @@ export async function deleteSource(sourceId: string, userId: string) {
     const source = await tx.source.findUnique({
       where: { id: sourceId },
       select: { scope: true, url: true },
-    })
+    });
 
     if (!source) {
-      throw new Error('Source not found')
+      throw new Error("Source not found");
     }
 
     // Delete the source (cascades to pages, chunks, jobs, workspaceSources)
     await tx.source.delete({
       where: { id: sourceId },
-    })
+    });
 
     // Create audit log
     await tx.auditLog.create({
       data: {
         userId,
-        action: 'DELETE_SOURCE',
-        entityType: 'SOURCE',
+        action: "DELETE_SOURCE",
+        entityType: "SOURCE",
         entityId: sourceId,
         before: { scope: source.scope, url: source.url },
-        after: null,
+        after: null as unknown as Prisma.InputJsonValue,
       },
-    })
+    });
 
-    return { success: true }
-  })
+    return { success: true };
+  });
 }
 
 /**
@@ -336,36 +338,38 @@ export async function deleteSource(sourceId: string, userId: string) {
  * (workspace sources used by 2+ workspaces)
  */
 export async function getPromotionCandidates(minWorkspaces = 2) {
-  return prisma.source.findMany({
-    where: {
-      scope: 'WORKSPACE',
-      status: 'ACTIVE',
-      workspaceSources: {
-        // Only get sources with 2+ workspace links
-        some: {},
-      },
-    },
-    include: {
-      _count: {
-        select: { workspaceSources: true, pages: true },
-      },
-      workspaceSources: {
-        include: {
-          workspace: {
-            select: { id: true, name: true, slug: true },
-          },
+  return prisma.source
+    .findMany({
+      where: {
+        scope: "WORKSPACE",
+        status: "ACTIVE",
+        workspaceSources: {
+          // Only get sources with 2+ workspace links
+          some: {},
         },
       },
-      usageStats: true,
-    },
-    orderBy: {
-      workspaceSources: {
-        _count: 'desc',
+      include: {
+        _count: {
+          select: { workspaceSources: true, pages: true },
+        },
+        workspaceSources: {
+          include: {
+            workspace: {
+              select: { id: true, name: true, slug: true },
+            },
+          },
+        },
+        usageStats: true,
       },
-    },
-  }).then((sources) =>
-    sources.filter((s) => s._count.workspaceSources >= minWorkspaces)
-  )
+      orderBy: {
+        workspaceSources: {
+          _count: "desc",
+        },
+      },
+    })
+    .then((sources) =>
+      sources.filter((s) => s._count.workspaceSources >= minWorkspaces)
+    );
 }
 
 /**
@@ -376,7 +380,7 @@ export async function updateSourceUsageStats(sourceId: string) {
     // Count workspaces
     const workspaceCount = await tx.workspaceSource.count({
       where: { sourceId },
-    })
+    });
 
     // Count queries (from QueryLog)
     const queryCount = await tx.queryLog.count({
@@ -385,7 +389,7 @@ export async function updateSourceUsageStats(sourceId: string) {
           has: sourceId,
         },
       },
-    })
+    });
 
     // Get last query time
     const lastQuery = await tx.queryLog.findFirst({
@@ -394,9 +398,9 @@ export async function updateSourceUsageStats(sourceId: string) {
           has: sourceId,
         },
       },
-      orderBy: { queriedAt: 'desc' },
+      orderBy: { queriedAt: "desc" },
       select: { queriedAt: true },
-    })
+    });
 
     // Upsert stats
     return tx.sourceUsageStats.upsert({
@@ -413,37 +417,43 @@ export async function updateSourceUsageStats(sourceId: string) {
         lastQueriedAt: lastQuery?.queriedAt,
         calculatedAt: new Date(),
       },
-    })
-  })
+    });
+  });
 
-  return stats
+  return stats;
 }
 
 /**
  * Get all sources for admin dashboard
  */
 export async function getAdminSources(params: {
-  scope?: SourceScope
-  minWorkspaces?: number
-  sortBy?: 'workspaceCount' | 'queryCount' | 'pageCount'
-  limit: number
-  offset: number
+  scope?: SourceScope;
+  minWorkspaces?: number;
+  sortBy?: "workspaceCount" | "queryCount" | "pageCount";
+  limit: number;
+  offset: number;
 }) {
-  const { scope, minWorkspaces, sortBy = 'workspaceCount', limit, offset } = params
+  const {
+    scope,
+    minWorkspaces,
+    sortBy = "workspaceCount",
+    limit,
+    offset,
+  } = params;
 
   const where: Prisma.SourceWhereInput = {
     ...(scope && { scope }),
-  }
+  };
 
   // Build order by clause
-  let orderBy: Prisma.SourceOrderByWithRelationInput = { updatedAt: 'desc' }
+  let orderBy: Prisma.SourceOrderByWithRelationInput = { updatedAt: "desc" };
 
-  if (sortBy === 'workspaceCount') {
-    orderBy = { workspaceSources: { _count: 'desc' } }
-  } else if (sortBy === 'queryCount') {
-    orderBy = { usageStats: { queryCount: 'desc' } }
-  } else if (sortBy === 'pageCount') {
-    orderBy = { pages: { _count: 'desc' } }
+  if (sortBy === "workspaceCount") {
+    orderBy = { workspaceSources: { _count: "desc" } };
+  } else if (sortBy === "queryCount") {
+    orderBy = { usageStats: { queryCount: "desc" } };
+  } else if (sortBy === "pageCount") {
+    orderBy = { pages: { _count: "desc" } };
   }
 
   const [sources, total] = await prisma.$transaction([
@@ -470,15 +480,15 @@ export async function getAdminSources(params: {
       take: limit,
     }),
     prisma.source.count({ where }),
-  ])
+  ]);
 
   // Filter by minWorkspaces if specified
   const filtered = minWorkspaces
     ? sources.filter((s) => s._count.workspaceSources >= minWorkspaces)
-    : sources
+    : sources;
 
   return {
     sources: filtered,
     total: minWorkspaces ? filtered.length : total,
-  }
+  };
 }

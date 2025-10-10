@@ -1,30 +1,36 @@
 // Source Management Service
 // Business logic for source CRUD operations with global source architecture
 
-import { prisma, Prisma, SourceScope, SourceStatus } from '@/lib/db'
-import { NotFoundError, ForbiddenError, ConflictError } from '@/lib/utils/errors'
+import { prisma, Prisma, SourceScope, SourceStatus } from "@/lib/db";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from "@/lib/utils/errors";
 
 // Get sources available to workspace (global + workspace-specific)
 export async function getWorkspaceSources(params: {
-  userId: string
-  workspaceId?: string
-  status?: SourceStatus
-  scope?: SourceScope
-  limit: number
-  offset: number
+  userId: string;
+  workspaceId?: string;
+  status?: SourceStatus;
+  scope?: SourceScope;
+  limit: number;
+  offset: number;
 }) {
-  const { userId, workspaceId, status, scope, limit, offset } = params
+  const { userId, workspaceId, status, scope, limit, offset } = params;
 
   // Get user's workspaces
   const workspaces = await prisma.workspace.findMany({
     where: { ownerId: userId },
     select: { id: true },
-  })
+  });
 
-  const workspaceIds = workspaceId ? [workspaceId] : workspaces.map((w) => w.id)
+  const workspaceIds = workspaceId
+    ? [workspaceId]
+    : workspaces.map((w) => w.id);
 
   if (workspaceIds.length === 0) {
-    return { sources: [], total: 0 }
+    return { sources: [], total: 0 };
   }
 
   // Build query: global sources + workspace-specific sources
@@ -46,7 +52,7 @@ export async function getWorkspaceSources(params: {
       status ? { status } : {},
       scope ? { scope } : {},
     ],
-  }
+  };
 
   // Execute query with pagination
   const [sources, total] = await prisma.$transaction([
@@ -60,14 +66,14 @@ export async function getWorkspaceSources(params: {
         },
         usageStats: true,
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
       skip: offset,
       take: limit,
     }),
     prisma.source.count({ where }),
-  ])
+  ]);
 
-  return { sources, total }
+  return { sources, total };
 }
 
 // Get single source by ID with access check
@@ -76,7 +82,7 @@ export async function getSourceById(sourceId: string, userId: string) {
     where: { id: sourceId },
     include: {
       _count: {
-        select: { pages: true, chunks: { select: { id: true } } },
+        select: { pages: true },
       },
       workspaceSources: {
         include: {
@@ -87,33 +93,33 @@ export async function getSourceById(sourceId: string, userId: string) {
       },
       usageStats: true,
     },
-  })
+  });
 
   if (!source) {
-    throw new NotFoundError('Source')
+    throw new NotFoundError("Source");
   }
 
   // Check access: global sources are always accessible
   if (source.scope === SourceScope.GLOBAL) {
-    return source
+    return source;
   }
 
   // For workspace sources, check if user has access
   const userWorkspaces = await prisma.workspace.findMany({
     where: { ownerId: userId },
     select: { id: true },
-  })
+  });
 
-  const userWorkspaceIds = userWorkspaces.map((w) => w.id)
+  const userWorkspaceIds = userWorkspaces.map((w) => w.id);
   const hasAccess = source.workspaceSources.some((ws) =>
     userWorkspaceIds.includes(ws.workspaceId)
-  )
+  );
 
   if (!hasAccess) {
-    throw new ForbiddenError('You do not have access to this source')
+    throw new ForbiddenError("You do not have access to this source");
   }
 
-  return source
+  return source;
 }
 
 // Check if source exists by URL
@@ -125,22 +131,22 @@ export async function checkSourceExists(url: string) {
         select: { workspaceId: true },
       },
     },
-  })
+  });
 }
 
 // Create new source or link existing global source
 export async function createSource(params: {
-  url: string
-  domain: string
-  type: 'WEBSITE' | 'GITHUB' | 'CONFLUENCE' | 'CUSTOM'
-  workspaceId: string
-  userId: string
-  config?: any
+  url: string;
+  domain: string;
+  type: "WEBSITE" | "GITHUB" | "CONFLUENCE" | "CUSTOM";
+  workspaceId: string;
+  userId: string;
+  config?: any;
 }) {
-  const { url, domain, type, workspaceId, userId, config } = params
+  const { url, domain, type, workspaceId, userId, config } = params;
 
   // Check if source already exists
-  const existingSource = await checkSourceExists(url)
+  const existingSource = await checkSourceExists(url);
 
   if (existingSource) {
     // If global source, just link to workspace
@@ -153,10 +159,12 @@ export async function createSource(params: {
             sourceId: existingSource.id,
           },
         },
-      })
+      });
 
       if (existingLink) {
-        throw new ConflictError('This global source is already added to your workspace')
+        throw new ConflictError(
+          "This global source is already added to your workspace"
+        );
       }
 
       // Create workspace link
@@ -166,19 +174,19 @@ export async function createSource(params: {
           workspaceId,
           addedBy: userId,
         },
-      })
+      });
 
       return {
         source: existingSource,
         isGlobal: true,
         linked: true,
-      }
+      };
     }
 
     // If workspace source in another workspace, return error
     throw new ConflictError(
-      'This source is already indexed in another workspace. Contact an admin to promote it to global.'
-    )
+      "This source is already indexed in another workspace. Contact an admin to promote it to global."
+    );
   }
 
   // Create new source with WORKSPACE scope
@@ -192,7 +200,7 @@ export async function createSource(params: {
       config,
       createdById: userId,
     },
-  })
+  });
 
   // Link to workspace
   await prisma.workspaceSource.create({
@@ -201,7 +209,7 @@ export async function createSource(params: {
       workspaceId,
       addedBy: userId,
     },
-  })
+  });
 
   // Initialize usage stats
   await prisma.sourceUsageStats.create({
@@ -209,13 +217,13 @@ export async function createSource(params: {
       sourceId: source.id,
       workspaceCount: 1,
     },
-  })
+  });
 
   return {
     source,
     isGlobal: false,
     linked: false,
-  }
+  };
 }
 
 // Update source configuration
@@ -223,11 +231,11 @@ export async function updateSource(
   sourceId: string,
   userId: string,
   data: {
-    config?: any
-    status?: SourceStatus
+    config?: any;
+    status?: SourceStatus;
   }
 ) {
-  const source = await getSourceById(sourceId, userId)
+  const source = await getSourceById(sourceId, userId);
 
   // Only allow updates to workspace sources owned by user
   // or global sources if user is admin
@@ -235,22 +243,22 @@ export async function updateSource(
     const userWorkspaces = await prisma.workspace.findMany({
       where: { ownerId: userId },
       select: { id: true },
-    })
+    });
 
-    const userWorkspaceIds = userWorkspaces.map((w) => w.id)
+    const userWorkspaceIds = userWorkspaces.map((w) => w.id);
     const ownsSource = source.workspaceSources.some((ws) =>
       userWorkspaceIds.includes(ws.workspaceId)
-    )
+    );
 
     if (!ownsSource) {
-      throw new ForbiddenError('You cannot update this source')
+      throw new ForbiddenError("You cannot update this source");
     }
   }
 
   return await prisma.source.update({
     where: { id: sourceId },
     data,
-  })
+  });
 }
 
 // Delete source or remove workspace link
@@ -259,15 +267,15 @@ export async function deleteSource(
   workspaceId: string,
   userId: string
 ) {
-  const source = await getSourceById(sourceId, userId)
+  const source = await getSourceById(sourceId, userId);
 
   // Verify workspace ownership
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
-  })
+  });
 
   if (!workspace || workspace.ownerId !== userId) {
-    throw new ForbiddenError('You do not own this workspace')
+    throw new ForbiddenError("You do not own this workspace");
   }
 
   // Remove workspace link
@@ -278,7 +286,7 @@ export async function deleteSource(
         sourceId,
       },
     },
-  })
+  });
 
   // Update usage stats
   await prisma.sourceUsageStats.update({
@@ -286,31 +294,31 @@ export async function deleteSource(
     data: {
       workspaceCount: { decrement: 1 },
     },
-  })
+  });
 
   // If workspace source and no more workspaces use it, delete entirely
   if (source.scope === SourceScope.WORKSPACE) {
     const remainingLinks = await prisma.workspaceSource.count({
       where: { sourceId },
-    })
+    });
 
     if (remainingLinks === 0) {
       await prisma.source.delete({
         where: { id: sourceId },
-      })
+      });
     }
   }
 
-  return { deleted: true }
+  return { deleted: true };
 }
 
 // Promote source to global (admin only)
 export async function promoteSourceToGlobal(params: {
-  sourceId: string
-  adminId: string
-  reason?: string
+  sourceId: string;
+  adminId: string;
+  reason?: string;
 }) {
-  const { sourceId, adminId, reason } = params
+  const { sourceId, adminId, reason } = params;
 
   const source = await prisma.$transaction(async (tx) => {
     // Get current source
@@ -320,14 +328,14 @@ export async function promoteSourceToGlobal(params: {
         workspaceSources: true,
         _count: { select: { pages: true } },
       },
-    })
+    });
 
     if (!currentSource) {
-      throw new NotFoundError('Source')
+      throw new NotFoundError("Source");
     }
 
     if (currentSource.scope === SourceScope.GLOBAL) {
-      throw new ConflictError('Source is already global')
+      throw new ConflictError("Source is already global");
     }
 
     // Update source scope
@@ -342,47 +350,47 @@ export async function promoteSourceToGlobal(params: {
         workspaceSources: true,
         _count: { select: { pages: true } },
       },
-    })
+    });
 
     // Create audit log
     await tx.auditLog.create({
       data: {
         userId: adminId,
-        action: 'PROMOTE_SOURCE',
-        entityType: 'SOURCE',
+        action: "PROMOTE_SOURCE",
+        entityType: "SOURCE",
         entityId: sourceId,
         before: { scope: SourceScope.WORKSPACE },
         after: { scope: SourceScope.GLOBAL },
         reason,
       },
-    })
+    });
 
-    return updated
-  })
+    return updated;
+  });
 
-  return source
+  return source;
 }
 
 // Demote source to workspace (super admin only)
 export async function demoteSourceToWorkspace(params: {
-  sourceId: string
-  adminId: string
-  targetWorkspaceId: string
-  reason?: string
+  sourceId: string;
+  adminId: string;
+  targetWorkspaceId: string;
+  reason?: string;
 }) {
-  const { sourceId, adminId, targetWorkspaceId, reason } = params
+  const { sourceId, adminId, targetWorkspaceId, reason } = params;
 
   const source = await prisma.$transaction(async (tx) => {
     const currentSource = await tx.source.findUnique({
       where: { id: sourceId },
-    })
+    });
 
     if (!currentSource) {
-      throw new NotFoundError('Source')
+      throw new NotFoundError("Source");
     }
 
     if (currentSource.scope === SourceScope.WORKSPACE) {
-      throw new ConflictError('Source is already workspace-scoped')
+      throw new ConflictError("Source is already workspace-scoped");
     }
 
     // Update source scope
@@ -391,38 +399,44 @@ export async function demoteSourceToWorkspace(params: {
       data: {
         scope: SourceScope.WORKSPACE,
       },
-    })
+    });
 
     // Create audit log
     await tx.auditLog.create({
       data: {
         userId: adminId,
-        action: 'DEMOTE_SOURCE',
-        entityType: 'SOURCE',
+        action: "DEMOTE_SOURCE",
+        entityType: "SOURCE",
         entityId: sourceId,
         before: { scope: SourceScope.GLOBAL },
         after: { scope: SourceScope.WORKSPACE, targetWorkspaceId },
         reason,
       },
-    })
+    });
 
-    return updated
-  })
+    return updated;
+  });
 
-  return source
+  return source;
 }
 
 // Get admin statistics
 export async function getAdminSourceStats() {
-  const [total, globalCount, workspaceCount, activeCount, indexingCount, errorCount] =
-    await Promise.all([
-      prisma.source.count(),
-      prisma.source.count({ where: { scope: SourceScope.GLOBAL } }),
-      prisma.source.count({ where: { scope: SourceScope.WORKSPACE } }),
-      prisma.source.count({ where: { status: SourceStatus.ACTIVE } }),
-      prisma.source.count({ where: { status: SourceStatus.INDEXING } }),
-      prisma.source.count({ where: { status: SourceStatus.ERROR } }),
-    ])
+  const [
+    total,
+    globalCount,
+    workspaceCount,
+    activeCount,
+    indexingCount,
+    errorCount,
+  ] = await Promise.all([
+    prisma.source.count(),
+    prisma.source.count({ where: { scope: SourceScope.GLOBAL } }),
+    prisma.source.count({ where: { scope: SourceScope.WORKSPACE } }),
+    prisma.source.count({ where: { status: SourceStatus.ACTIVE } }),
+    prisma.source.count({ where: { status: SourceStatus.INDEXING } }),
+    prisma.source.count({ where: { status: SourceStatus.ERROR } }),
+  ]);
 
   // Find promotion candidates (workspace sources used by 2+ workspaces)
   const promotionCandidates = await prisma.source.findMany({
@@ -437,11 +451,11 @@ export async function getAdminSourceStats() {
         select: { workspaceSources: true },
       },
     },
-  })
+  });
 
   const candidatesCount = promotionCandidates.filter(
     (s) => s._count.workspaceSources >= 2
-  ).length
+  ).length;
 
   return {
     total,
@@ -451,5 +465,5 @@ export async function getAdminSourceStats() {
     indexing: indexingCount,
     error: errorCount,
     promotionCandidates: candidatesCount,
-  }
+  };
 }

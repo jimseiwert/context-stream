@@ -1,23 +1,26 @@
-import type { Metadata } from "next"
-import { Inter, JetBrains_Mono } from "next/font/google"
-import "./globals.css"
-import { ThemeProvider } from "@/components/providers/theme-provider"
-import { QueryProvider } from "@/components/providers/query-provider"
-import { Toaster } from "sonner"
+import { QueryProvider } from "@/components/providers/query-provider";
+import { ThemeProvider } from "@/components/providers/theme-provider";
+import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import { Toaster } from "sonner";
+import "./globals.css";
+
+export const dynamic = "force-dynamic";
 
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
-})
+});
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
-})
+});
 
 export const metadata: Metadata = {
   title: "ContextStream - AI-Accessible Documentation",
-  description: "Make any documentation AI-accessible in minutes with ContextStream's MCP server",
+  description:
+    "Make any documentation AI-accessible in minutes with ContextStream's MCP server",
   keywords: ["documentation", "MCP", "AI", "search", "indexing", "Claude"],
   authors: [{ name: "ContextStream" }],
   creator: "ContextStream",
@@ -46,12 +49,12 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-}
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -77,5 +80,5 @@ export default function RootLayout({
         </ThemeProvider>
       </body>
     </html>
-  )
+  );
 }

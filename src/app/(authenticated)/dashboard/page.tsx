@@ -1,53 +1,69 @@
-"use client"
+"use client";
 
-import { useQuery } from "@tanstack/react-query"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
+export const dynamic = "force-dynamic";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { apiClient } from "@/lib/api-client";
+import { useQuery } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle,
+  Clock,
   Database,
   FileText,
   HardDrive,
-  Search,
+  PauseCircle,
   Plus,
-  ArrowRight,
-  Clock,
-  CheckCircle,
   RefreshCw,
-  AlertCircle,
-  PauseCircle
-} from "lucide-react"
-import Link from "next/link"
-import { apiClient } from "@/lib/api-client"
-import { formatDistanceToNow } from "date-fns"
+  Search,
+} from "lucide-react";
+import Link from "next/link";
 
 interface DashboardStats {
-  sources: number
-  pages: number
-  storageKB: number
-  queries: number
+  sources: number;
+  pages: number;
+  storageKB: number;
+  queries: number;
 }
 
 interface RecentSource {
-  id: string
-  name: string
-  url: string
-  status: string
-  pageCount: number
-  lastUpdated: string | null
-  scope: string
+  id: string;
+  name: string;
+  url: string;
+  status: string;
+  pageCount: number;
+  lastUpdated: string | null;
+  scope: string;
 }
 
 interface RecentActivity {
-  id: string
-  type: string
-  description: string
-  result: string
-  timestamp: string
+  id: string;
+  type: string;
+  description: string;
+  result: string;
+  timestamp: string;
 }
 
-function StatsCard({ title, value, icon: Icon }: { title: string; value: string | number; icon: any }) {
+function StatsCard({
+  title,
+  value,
+  icon: Icon,
+}: {
+  title: string;
+  value: string | number;
+  icon: any;
+}) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -58,7 +74,7 @@ function StatsCard({ title, value, icon: Icon }: { title: string; value: string 
         <div className="text-2xl font-bold">{value}</div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function SourceCard({ source }: { source: RecentSource }) {
@@ -68,10 +84,10 @@ function SourceCard({ source }: { source: RecentSource }) {
     PENDING: { icon: Clock, color: "text-yellow-500" },
     PAUSED: { icon: PauseCircle, color: "text-orange-500" },
     ERROR: { icon: AlertCircle, color: "text-red-500" },
-  }
+  };
 
-  const config = statusConfig[source.status] || statusConfig.ACTIVE
-  const StatusIcon = config.icon
+  const config = statusConfig[source.status] || statusConfig.ACTIVE;
+  const StatusIcon = config.icon;
 
   return (
     <Link href={`/sources/${source.id}`}>
@@ -96,13 +112,18 @@ function SourceCard({ source }: { source: RecentSource }) {
               </Badge>
             </div>
             <div className="text-muted-foreground">
-              {source.pageCount} pages · {source.lastUpdated ? formatDistanceToNow(new Date(source.lastUpdated), { addSuffix: true }) : "Never"}
+              {source.pageCount} pages ·{" "}
+              {source.lastUpdated
+                ? formatDistanceToNow(new Date(source.lastUpdated), {
+                    addSuffix: true,
+                  })
+                : "Never"}
             </div>
           </div>
         </CardContent>
       </Card>
     </Link>
-  )
+  );
 }
 
 function ActivityItem({ activity }: { activity: RecentActivity }) {
@@ -110,8 +131,8 @@ function ActivityItem({ activity }: { activity: RecentActivity }) {
     search: Search,
     update: RefreshCw,
     add: Plus,
-  }
-  const Icon = typeIcons[activity.type] || Search
+  };
+  const Icon = typeIcons[activity.type] || Search;
 
   return (
     <div className="flex items-start space-x-3 py-3">
@@ -122,16 +143,20 @@ function ActivityItem({ activity }: { activity: RecentActivity }) {
         <p className="text-sm">
           {activity.description}
           {activity.result && (
-            <span className="ml-2 text-muted-foreground">→ {activity.result}</span>
+            <span className="ml-2 text-muted-foreground">
+              → {activity.result}
+            </span>
           )}
         </p>
         <p className="text-xs text-muted-foreground flex items-center">
           <Clock className="mr-1 h-3 w-3" />
-          {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+          {formatDistanceToNow(new Date(activity.timestamp), {
+            addSuffix: true,
+          })}
         </p>
       </div>
     </div>
-  )
+  );
 }
 
 export default function DashboardPage() {
@@ -139,17 +164,17 @@ export default function DashboardPage() {
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
       const response = await apiClient.get<{
-        stats: DashboardStats
-        recentSources: RecentSource[]
-        recentActivity: RecentActivity[]
-      }>("/api/dashboard/stats")
-      return response
+        stats: DashboardStats;
+        recentSources: RecentSource[];
+        recentActivity: RecentActivity[];
+      }>("/api/dashboard/stats");
+      return response;
     },
-  })
+  });
 
-  const stats = data?.stats
-  const recentSources = data?.recentSources || []
-  const recentActivity = data?.recentActivity || []
+  const stats = data?.stats;
+  const recentSources = data?.recentSources || [];
+  const recentActivity = data?.recentActivity || [];
 
   return (
     <div className="space-y-8">
@@ -178,10 +203,26 @@ export default function DashboardPage() {
         </div>
       ) : stats ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <StatsCard title="Total Sources" value={stats.sources} icon={Database} />
-          <StatsCard title="Total Pages" value={stats.pages.toLocaleString()} icon={FileText} />
-          <StatsCard title="Storage Used" value={`${Math.round(stats.storageKB / 1024)} MB`} icon={HardDrive} />
-          <StatsCard title="Recent Queries" value={stats.queries} icon={Search} />
+          <StatsCard
+            title="Total Sources"
+            value={stats.sources}
+            icon={Database}
+          />
+          <StatsCard
+            title="Total Pages"
+            value={stats.pages.toLocaleString()}
+            icon={FileText}
+          />
+          <StatsCard
+            title="Storage Used"
+            value={`${Math.round(stats.storageKB / 1024)} MB`}
+            icon={HardDrive}
+          />
+          <StatsCard
+            title="Recent Queries"
+            value={stats.queries}
+            icon={Search}
+          />
         </div>
       ) : null}
 
@@ -199,9 +240,7 @@ export default function DashboardPage() {
           </div>
           <div className="space-y-4">
             {isLoading ? (
-              [...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-32" />
-              ))
+              [...Array(3)].map((_, i) => <Skeleton key={i} className="h-32" />)
             ) : recentSources.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
@@ -242,7 +281,9 @@ export default function DashboardPage() {
               ) : recentActivity.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Clock className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No activity yet</h3>
+                  <h3 className="text-lg font-semibold mb-2">
+                    No activity yet
+                  </h3>
                   <p className="text-muted-foreground text-center">
                     Activity will appear here as you use the platform
                   </p>
@@ -276,11 +317,9 @@ export default function DashboardPage() {
           </Link>
         </Button>
         <Button asChild variant="outline">
-          <Link href="/settings/api-keys">
-            Key Management
-          </Link>
+          <Link href="/settings/api-keys">Key Management</Link>
         </Button>
       </div>
     </div>
-  )
+  );
 }

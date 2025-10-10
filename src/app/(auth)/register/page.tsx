@@ -1,40 +1,52 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Github, Loader2 } from "lucide-react"
-import { toast } from "sonner"
-import { authClient } from "@/lib/auth/client"
+export const dynamic = "force-dynamic";
 
-const registerSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Please enter a valid email"),
-  password: z.string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-      "Password must contain at least one uppercase letter, one lowercase letter, and one number"
-    ),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-})
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { authClient } from "@/lib/auth/client";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Github, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 
-type RegisterFormData = z.infer<typeof registerSchema>
+const registerSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Please enter a valid email"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .regex(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+        "Password must contain at least one uppercase letter, one lowercase letter, and one number"
+      ),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
+
+type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
-  const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-  const [isGithubLoading, setIsGithubLoading] = useState(false)
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isGithubLoading, setIsGithubLoading] = useState(false);
 
   const {
     register,
@@ -42,44 +54,46 @@ export default function RegisterPage() {
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
-  })
+  });
 
   const onSubmit = async (data: RegisterFormData) => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
       // Use better-auth signUp
       const result = await authClient.signUp.email({
         email: data.email,
         password: data.password,
         name: data.name,
-      })
+      });
 
       if (result.error) {
-        throw new Error(result.error.message || "Failed to create account")
+        throw new Error(result.error.message || "Failed to create account");
       }
 
-      toast.success("Account created successfully!")
+      toast.success("Account created successfully!");
       // Use hard redirect to ensure session cookie is picked up
-      window.location.href = "/dashboard"
+      window.location.href = "/dashboard";
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create account")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create account"
+      );
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleGithubSignup = async () => {
-    setIsGithubLoading(true)
+    setIsGithubLoading(true);
     try {
       await authClient.signIn.social({
         provider: "github",
         callbackURL: "/dashboard",
-      })
+      });
     } catch (error) {
-      toast.error("Failed to sign up with GitHub")
-      setIsGithubLoading(false)
+      toast.error("Failed to sign up with GitHub");
+      setIsGithubLoading(false);
     }
-  }
+  };
 
   return (
     <Card className="w-full">
@@ -151,10 +165,15 @@ export default function RegisterPage() {
               disabled={isLoading}
               {...register("confirmPassword")}
               aria-invalid={!!errors.confirmPassword}
-              aria-describedby={errors.confirmPassword ? "confirmPassword-error" : undefined}
+              aria-describedby={
+                errors.confirmPassword ? "confirmPassword-error" : undefined
+              }
             />
             {errors.confirmPassword && (
-              <p id="confirmPassword-error" className="text-sm text-destructive">
+              <p
+                id="confirmPassword-error"
+                className="text-sm text-destructive"
+              >
                 {errors.confirmPassword.message}
               </p>
             )}
@@ -217,5 +236,5 @@ export default function RegisterPage() {
         </p>
       </CardFooter>
     </Card>
-  )
+  );
 }

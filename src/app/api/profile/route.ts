@@ -4,17 +4,18 @@
  * PUT /api/profile - Update current user profile
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getApiSession } from '@/lib/auth/api'
-import { prisma } from '@/lib/db'
-import { z } from 'zod'
+import { getApiSession } from "@/lib/auth/api";
+import { prisma } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const UpdateProfileSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   image: z.string().url().optional().nullable(),
-})
+});
 
 /**
  * GET /api/profile
@@ -22,9 +23,9 @@ const UpdateProfileSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
@@ -45,10 +46,10 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-    })
+    });
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -57,13 +58,13 @@ export async function GET(request: NextRequest) {
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
       },
-    })
+    });
   } catch (error: any) {
-    console.error('[API] GET /api/profile error:', error)
+    console.error("[API] GET /api/profile error:", error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }
 
@@ -73,13 +74,13 @@ export async function GET(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json()
-    const data = UpdateProfileSchema.parse(body)
+    const body = await request.json();
+    const data = UpdateProfileSchema.parse(body);
 
     const updatedUser = await prisma.user.update({
       where: { id: session.user.id },
@@ -103,7 +104,7 @@ export async function PUT(request: NextRequest) {
           },
         },
       },
-    })
+    });
 
     return NextResponse.json({
       user: {
@@ -111,20 +112,20 @@ export async function PUT(request: NextRequest) {
         createdAt: updatedUser.createdAt.toISOString(),
         updatedAt: updatedUser.updatedAt.toISOString(),
       },
-    })
+    });
   } catch (error: any) {
-    console.error('[API] PUT /api/profile error:', error)
+    console.error("[API] PUT /api/profile error:", error);
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: "Validation error", details: error.errors },
         { status: 400 }
-      )
+      );
     }
 
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }

@@ -1,19 +1,5 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,73 +9,97 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  Database,
-  Globe,
-  Building2,
-  Search,
-  CheckCircle,
-  XCircle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAdminRescrapeSource, useSources } from "@/hooks/use-sources";
+import { apiClient } from "@/lib/api-client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
+import {
   AlertCircle,
-  RefreshCw,
-  TrendingUp,
-  ExternalLink,
   ArrowUpCircle,
-} from "lucide-react"
-import { useSources, useAdminRescrapeSource } from "@/hooks/use-sources"
-import { format } from "date-fns"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { apiClient } from "@/lib/api-client"
-import { toast } from "sonner"
+  Building2,
+  CheckCircle,
+  Database,
+  ExternalLink,
+  Globe,
+  RefreshCw,
+  Search,
+  TrendingUp,
+  XCircle,
+} from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import { toast } from "sonner";
 
 export default function AdminSourcesPage() {
-  const { data: sources = [], isLoading } = useSources()
-  const [searchQuery, setSearchQuery] = useState("")
-  const [filterScope, setFilterScope] = useState<"all" | "global" | "workspace">("all")
-  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "error" | "indexing">("all")
-  const [promoteDialogOpen, setPromoteDialogOpen] = useState(false)
-  const [rescrapeDialogOpen, setRescrapeDialogOpen] = useState(false)
-  const [selectedSource, setSelectedSource] = useState<any>(null)
+  const { data: sources = [], isLoading } = useSources();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterScope, setFilterScope] = useState<
+    "all" | "global" | "workspace"
+  >("all");
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | "active" | "error" | "indexing"
+  >("all");
+  const [promoteDialogOpen, setPromoteDialogOpen] = useState(false);
+  const [rescrapeDialogOpen, setRescrapeDialogOpen] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<any>(null);
 
-  const queryClient = useQueryClient()
-  const rescrapeSource = useAdminRescrapeSource()
+  const queryClient = useQueryClient();
+  const rescrapeSource = useAdminRescrapeSource();
 
   // Mutation for promoting source to global
   const promoteMutation = useMutation({
     mutationFn: async (sourceId: string) => {
-      return apiClient.post(`/api/admin/sources/${sourceId}/promote`, {})
+      return apiClient.post(`/api/admin/sources/${sourceId}/promote`, {});
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       toast.success("Source promoted to global successfully!", {
         description: `${data.source.domain} is now accessible to all users.`,
-      })
-      queryClient.invalidateQueries({ queryKey: ["sources"] })
-      setPromoteDialogOpen(false)
-      setSelectedSource(null)
+      });
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+      setPromoteDialogOpen(false);
+      setSelectedSource(null);
     },
     onError: (error: any) => {
       toast.error("Failed to promote source", {
         description: error.message || "Please try again later.",
-      })
+      });
     },
-  })
+  });
 
   const handlePromoteClick = (source: any) => {
-    setSelectedSource(source)
-    setPromoteDialogOpen(true)
-  }
+    setSelectedSource(source);
+    setPromoteDialogOpen(true);
+  };
 
   const handleConfirmPromote = () => {
     if (selectedSource) {
-      promoteMutation.mutate(selectedSource.id)
+      promoteMutation.mutate(selectedSource.id);
     }
-  }
+  };
 
   const handleRescrapeClick = (source: any) => {
-    setSelectedSource(source)
-    setRescrapeDialogOpen(true)
-  }
+    setSelectedSource(source);
+    setRescrapeDialogOpen(true);
+  };
 
   const handleConfirmRescrape = async () => {
     if (selectedSource) {
@@ -97,53 +107,72 @@ export default function AdminSourcesPage() {
         await rescrapeSource.mutateAsync({
           sourceId: selectedSource.id,
           fullReindex: true,
-        })
-        setRescrapeDialogOpen(false)
-        setSelectedSource(null)
+        });
+        setRescrapeDialogOpen(false);
+        setSelectedSource(null);
       } catch (error) {
         // Error is handled by the mutation
       }
     }
-  }
+  };
 
   // Filter sources
   const filteredSources = sources.filter((source) => {
     const matchesSearch =
       source.domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
       source.url.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (source.name && source.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      (source.name &&
+        source.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesScope =
       filterScope === "all" ||
       (filterScope === "global" && source.scope === "GLOBAL") ||
-      (filterScope === "workspace" && source.scope === "WORKSPACE")
+      (filterScope === "workspace" && source.scope === "WORKSPACE");
 
     const matchesStatus =
       filterStatus === "all" ||
-      source.status.toLowerCase() === filterStatus.toLowerCase()
+      source.status.toLowerCase() === filterStatus.toLowerCase();
 
-    return matchesSearch && matchesScope && matchesStatus
-  })
+    return matchesSearch && matchesScope && matchesStatus;
+  });
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      ACTIVE: { color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200", icon: CheckCircle },
-      INDEXING: { color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", icon: RefreshCw },
-      PENDING: { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", icon: AlertCircle },
-      ERROR: { color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200", icon: XCircle },
-      PAUSED: { color: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200", icon: AlertCircle },
-    }
+      ACTIVE: {
+        color:
+          "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+        icon: CheckCircle,
+      },
+      INDEXING: {
+        color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+        icon: RefreshCw,
+      },
+      PENDING: {
+        color:
+          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+        icon: AlertCircle,
+      },
+      ERROR: {
+        color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+        icon: XCircle,
+      },
+      PAUSED: {
+        color: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+        icon: AlertCircle,
+      },
+    };
 
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.PENDING
-    const Icon = config.icon
+    const config =
+      statusConfig[status as keyof typeof statusConfig] || statusConfig.PENDING;
+    const Icon = config.icon;
 
     return (
       <Badge className={config.color}>
         <Icon className="mr-1 h-3 w-3" />
         {status}
       </Badge>
-    )
-  }
+    );
+  };
 
   // Calculate stats
   const stats = {
@@ -152,7 +181,7 @@ export default function AdminSourcesPage() {
     workspace: sources.filter((s) => s.scope === "WORKSPACE").length,
     active: sources.filter((s) => s.status === "ACTIVE").length,
     totalPages: sources.reduce((sum, s) => sum + s.pageCount, 0),
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -215,7 +244,9 @@ export default function AdminSourcesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalPages.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              {stats.totalPages.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -236,7 +267,10 @@ export default function AdminSourcesPage() {
                 className="pl-9"
               />
             </div>
-            <Select value={filterScope} onValueChange={(value: any) => setFilterScope(value)}>
+            <Select
+              value={filterScope}
+              onValueChange={(value: any) => setFilterScope(value)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Filter by scope" />
               </SelectTrigger>
@@ -246,7 +280,10 @@ export default function AdminSourcesPage() {
                 <SelectItem value="workspace">Workspace Only</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
+            <Select
+              value={filterStatus}
+              onValueChange={(value: any) => setFilterStatus(value)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -303,12 +340,18 @@ export default function AdminSourcesPage() {
                         </h3>
                       </Link>
                       {source.scope === "GLOBAL" ? (
-                        <Badge variant="default" className="flex items-center space-x-1">
+                        <Badge
+                          variant="default"
+                          className="flex items-center space-x-1"
+                        >
                           <Globe className="h-3 w-3" />
                           <span>Global</span>
                         </Badge>
                       ) : (
-                        <Badge variant="secondary" className="flex items-center space-x-1">
+                        <Badge
+                          variant="secondary"
+                          className="flex items-center space-x-1"
+                        >
                           <Building2 className="h-3 w-3" />
                           <span>Workspace</span>
                         </Badge>
@@ -330,27 +373,34 @@ export default function AdminSourcesPage() {
                         <span>{source.pageCount.toLocaleString()} pages</span>
                       </span>
                       <span>
-                        Created {format(new Date(source.createdAt), "MMM d, yyyy")}
+                        Created{" "}
+                        {format(new Date(source.createdAt), "MMM d, yyyy")}
                       </span>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    {source.scope === "WORKSPACE" && source.status === "ACTIVE" && source.pageCount > 0 && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handlePromoteClick(source)}
-                        disabled={promoteMutation.isPending}
-                      >
-                        <ArrowUpCircle className="h-4 w-4 mr-1" />
-                        Promote to Global
-                      </Button>
-                    )}
+                    {source.scope === "WORKSPACE" &&
+                      source.status === "ACTIVE" &&
+                      source.pageCount > 0 && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handlePromoteClick(source)}
+                          disabled={promoteMutation.isPending}
+                        >
+                          <ArrowUpCircle className="h-4 w-4 mr-1" />
+                          Promote to Global
+                        </Button>
+                      )}
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleRescrapeClick(source)}
-                      disabled={rescrapeSource.isPending || source.status === "INDEXING" || source.status === "PENDING"}
+                      disabled={
+                        rescrapeSource.isPending ||
+                        source.status === "INDEXING" ||
+                        source.status === "PENDING"
+                      }
                     >
                       <RefreshCw className="h-4 w-4 mr-1" />
                       Re-scrape
@@ -374,12 +424,19 @@ export default function AdminSourcesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Promote Source to Global</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to promote <strong>{selectedSource?.domain}</strong> to global scope?
+              Are you sure you want to promote{" "}
+              <strong>{selectedSource?.domain}</strong> to global scope?
               <div className="mt-4 space-y-2 text-sm">
                 <p className="font-medium">This will:</p>
                 <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>Make this source accessible to all users across all workspaces</li>
-                  <li>Share all {selectedSource?.pageCount || 0} indexed pages globally</li>
+                  <li>
+                    Make this source accessible to all users across all
+                    workspaces
+                  </li>
+                  <li>
+                    Share all {selectedSource?.pageCount || 0} indexed pages
+                    globally
+                  </li>
                   <li>Reduce redundant indexing and improve efficiency</li>
                 </ul>
               </div>
@@ -401,21 +458,29 @@ export default function AdminSourcesPage() {
       </AlertDialog>
 
       {/* Re-scrape Confirmation Dialog */}
-      <AlertDialog open={rescrapeDialogOpen} onOpenChange={setRescrapeDialogOpen}>
+      <AlertDialog
+        open={rescrapeDialogOpen}
+        onOpenChange={setRescrapeDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Re-scrape Source</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to re-scrape <strong>{selectedSource?.domain}</strong>?
+              Are you sure you want to re-scrape{" "}
+              <strong>{selectedSource?.domain}</strong>?
               <div className="mt-4 space-y-2 text-sm">
                 <p className="font-medium">This will:</p>
                 <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>Delete all {selectedSource?.pageCount || 0} existing indexed pages</li>
+                  <li>
+                    Delete all {selectedSource?.pageCount || 0} existing indexed
+                    pages
+                  </li>
                   <li>Re-index the entire source from scratch</li>
                   <li>Take approximately 5-10 minutes to complete</li>
                   {selectedSource?.scope === "GLOBAL" && (
                     <li className="text-yellow-700 dark:text-yellow-400">
-                      This is a <strong>GLOBAL</strong> source - all users will be affected
+                      This is a <strong>GLOBAL</strong> source - all users will
+                      be affected
                     </li>
                   )}
                 </ul>
@@ -437,5 +502,5 @@ export default function AdminSourcesPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
+  );
 }

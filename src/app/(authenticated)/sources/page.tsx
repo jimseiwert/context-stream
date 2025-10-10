@@ -1,117 +1,133 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Skeleton } from "@/components/ui/skeleton"
+export const dynamic = "force-dynamic";
+
+import { QuotaWarning } from "@/components/billing/quota-warning";
+import { UpgradeDialog } from "@/components/billing/upgrade-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Plus,
-  Search,
-  MoreVertical,
-  RefreshCw,
-  Settings,
-  Trash2,
-  CheckCircle,
+  useDeleteSource,
+  useRescrapeSource,
+  useSources,
+} from "@/hooks/use-sources";
+import {
+  getQuotaExceededMessage,
+  useUpgradePrompt,
+} from "@/hooks/use-upgrade-prompt";
+import { calculateUsagePercentage, useUsage } from "@/hooks/use-usage";
+import {
   AlertCircle,
-  PauseCircle,
+  CheckCircle,
   Clock,
   Database,
-  Globe
-} from "lucide-react"
-import { useSources, useDeleteSource, useRescrapeSource } from "@/hooks/use-sources"
-import { useUsage, calculateUsagePercentage } from "@/hooks/use-usage"
-import { useUpgradePrompt, getQuotaExceededMessage } from "@/hooks/use-upgrade-prompt"
-import { QuotaWarning } from "@/components/billing/quota-warning"
-import { UpgradeDialog } from "@/components/billing/upgrade-dialog"
+  Globe,
+  MoreVertical,
+  PauseCircle,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings,
+  Trash2,
+} from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 
 export default function SourcesPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // No workspaceId needed - API will use user's personal workspace
-  const { data: sources = [], isLoading } = useSources()
-  const deleteSource = useDeleteSource()
-  const rescrapeSource = useRescrapeSource()
+  const { data: sources = [], isLoading } = useSources();
+  const deleteSource = useDeleteSource();
+  const rescrapeSource = useRescrapeSource();
 
   // Usage and quota tracking
-  const { data: usage } = useUsage()
-  const upgradePrompt = useUpgradePrompt()
+  const { data: usage } = useUsage();
+  const upgradePrompt = useUpgradePrompt();
 
   // Calculate if user is at or near source limit
-  const sourcesUsed = usage?.usage.sourcesUsed || 0
-  const sourcesLimit = usage?.quotas.maxSources || -1
-  const sourcesPercentage = calculateUsagePercentage(sourcesUsed, sourcesLimit)
-  const isAtLimit = sourcesPercentage >= 100 && sourcesLimit > 0
-  const isNearLimit = sourcesPercentage >= 90 && sourcesLimit > 0
+  const sourcesUsed = usage?.usage.sourcesUsed || 0;
+  const sourcesLimit = usage?.quotas.maxSources || -1;
+  const sourcesPercentage = calculateUsagePercentage(sourcesUsed, sourcesLimit);
+  const isAtLimit = sourcesPercentage >= 100 && sourcesLimit > 0;
+  const isNearLimit = sourcesPercentage >= 90 && sourcesLimit > 0;
 
   const filteredSources = sources.filter((source) => {
     const matchesSearch =
       searchQuery === "" ||
       source.domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      source.url.toLowerCase().includes(searchQuery.toLowerCase())
+      source.url.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus =
-      statusFilter === "all" || source.status === statusFilter.toUpperCase()
+      statusFilter === "all" || source.status === statusFilter.toUpperCase();
 
-    return matchesSearch && matchesStatus
-  })
+    return matchesSearch && matchesStatus;
+  });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "ACTIVE":
-        return <CheckCircle className="h-4 w-4 text-accent-green-500" />
+        return <CheckCircle className="h-4 w-4 text-accent-green-500" />;
       case "INDEXING":
       case "PENDING":
-        return <RefreshCw className="h-4 w-4 text-primary animate-spin" />
+        return <RefreshCw className="h-4 w-4 text-primary animate-spin" />;
       case "PAUSED":
-        return <PauseCircle className="h-4 w-4 text-accent-amber-500" />
+        return <PauseCircle className="h-4 w-4 text-accent-amber-500" />;
       case "ERROR":
-        return <AlertCircle className="h-4 w-4 text-accent-red-500" />
+        return <AlertCircle className="h-4 w-4 text-accent-red-500" />;
       default:
-        return <Clock className="h-4 w-4 text-muted-foreground" />
+        return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
-  }
+  };
 
   const getStatusBadgeVariant = (status: string): any => {
     switch (status) {
       case "ACTIVE":
-        return "success"
+        return "success";
       case "INDEXING":
       case "PENDING":
-        return "info"
+        return "info";
       case "PAUSED":
-        return "warning"
+        return "warning";
       case "ERROR":
-        return "error"
+        return "error";
       default:
-        return "secondary"
+        return "secondary";
     }
-  }
+  };
 
   const handleDelete = async (sourceId: string) => {
     if (confirm("Are you sure you want to remove this source?")) {
-      deleteSource.mutate({ sourceId })
+      deleteSource.mutate(sourceId);
     }
-  }
+  };
 
   const handleRescrape = (sourceId: string, fullReindex: boolean = false) => {
-    rescrapeSource.mutate({ sourceId, fullReindex })
-  }
+    rescrapeSource.mutate({ sourceId, fullReindex });
+  };
 
   const handleAddSourceClick = () => {
     if (isAtLimit) {
-      upgradePrompt.showUpgradePrompt(getQuotaExceededMessage('source'))
+      upgradePrompt.showUpgradePrompt(getQuotaExceededMessage("source"));
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -202,7 +218,10 @@ export default function SourcesPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredSources.map((source) => (
-            <Card key={source.id} className="hover:shadow-md transition-all duration-200">
+            <Card
+              key={source.id}
+              className="hover:shadow-md transition-all duration-200"
+            >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
@@ -225,11 +244,15 @@ export default function SourcesPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleRescrape(source.id)}>
+                      <DropdownMenuItem
+                        onClick={() => handleRescrape(source.id)}
+                      >
                         <RefreshCw className="mr-2 h-4 w-4" />
                         Update Now
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleRescrape(source.id, true)}>
+                      <DropdownMenuItem
+                        onClick={() => handleRescrape(source.id, true)}
+                      >
                         <RefreshCw className="mr-2 h-4 w-4" />
                         Full Re-index
                       </DropdownMenuItem>
@@ -260,14 +283,18 @@ export default function SourcesPage() {
                   </div>
                   {source.estimatedStorageKB && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Storage</span>
+                      <span className="text-sm text-muted-foreground">
+                        Storage
+                      </span>
                       <span className="text-sm">
                         {Math.round(source.estimatedStorageKB / 1024)} MB
                       </span>
                     </div>
                   )}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Last Updated</span>
+                    <span className="text-sm text-muted-foreground">
+                      Last Updated
+                    </span>
                     <span className="text-sm">
                       {source.lastScrapedAt
                         ? new Date(source.lastScrapedAt).toLocaleDateString()
@@ -284,7 +311,10 @@ export default function SourcesPage() {
                   </Badge>
                 </div>
                 {source.scope === "GLOBAL" && (
-                  <Badge variant="default" className="flex items-center space-x-1">
+                  <Badge
+                    variant="default"
+                    className="flex items-center space-x-1"
+                  >
                     <Globe className="h-3 w-3" />
                     <span>Global</span>
                   </Badge>
@@ -304,5 +334,5 @@ export default function SourcesPage() {
         suggestedTier={upgradePrompt.suggestedTier}
       />
     </div>
-  )
+  );
 }

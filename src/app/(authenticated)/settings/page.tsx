@@ -1,16 +1,16 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+export const dynamic = "force-dynamic";
+
 import {
-  Key,
-  User,
-  Bell,
-  Shield,
-  ChevronRight,
-  Boxes,
-} from "lucide-react"
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Bell, Boxes, ChevronRight, Key, Shield, User } from "lucide-react";
+import Link from "next/link";
 
 const settingsLinks = [
   {
@@ -48,7 +48,7 @@ const settingsLinks = [
     href: "/settings/notifications",
     available: true,
   },
-]
+];
 
 export default function SettingsPage() {
   return (
@@ -64,21 +64,11 @@ export default function SettingsPage() {
       {/* Settings Cards */}
       <div className="grid gap-4 md:grid-cols-2">
         {settingsLinks.map((link) => {
-          const Icon = link.icon
-          const CardComponent = link.available ? Link : "div"
-          const cardProps = link.available
-            ? { href: link.href }
-            : {}
+          const Icon = link.icon;
 
-          return (
-            <CardComponent key={link.href} {...cardProps}>
-              <Card
-                className={`h-full transition-all ${
-                  link.available
-                    ? "cursor-pointer hover:shadow-md hover:-translate-y-1"
-                    : "opacity-50 cursor-not-allowed"
-                }`}
-              >
+          return link.available ? (
+            <Link key={link.href} href={link.href}>
+              <Card className="h-full transition-all cursor-pointer hover:shadow-md hover:-translate-y-1">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="space-y-1 flex-1">
@@ -92,23 +82,37 @@ export default function SettingsPage() {
                         {link.description}
                       </CardDescription>
                     </div>
-                    {link.available && (
-                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                    )}
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
                   </div>
                 </CardHeader>
-                {!link.available && (
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      Coming soon
-                    </p>
-                  </CardContent>
-                )}
               </Card>
-            </CardComponent>
-          )
+            </Link>
+          ) : (
+            <div key={link.href}>
+              <Card className="h-full transition-all opacity-50 cursor-not-allowed">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                          <Icon className="h-5 w-5 text-primary" />
+                        </div>
+                        <CardTitle className="text-xl">{link.title}</CardTitle>
+                      </div>
+                      <CardDescription className="pt-2">
+                        {link.description}
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">Coming soon</p>
+                </CardContent>
+              </Card>
+            </div>
+          );
         })}
       </div>
     </div>
-  )
+  );
 }

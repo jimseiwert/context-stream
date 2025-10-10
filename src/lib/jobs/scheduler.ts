@@ -5,41 +5,43 @@
  * It checks every hour for sources that need to be rescraped and queues them.
  */
 
-import cron from 'node-cron'
-import { prisma } from '@/lib/db'
-import { addScrapeJob } from './queue'
+import { prisma } from "@/lib/db";
+import cron from "node-cron";
+import { addScrapeJob } from "./queue";
 
 /**
  * Calculate the next scrape time based on schedule type
  */
 export function calculateNextScrapeAt(
-  schedule: 'NEVER' | 'DAILY' | 'WEEKLY' | 'MONTHLY',
+  schedule: "NEVER" | "DAILY" | "WEEKLY" | "MONTHLY",
   from: Date = new Date()
 ): Date | null {
-  if (schedule === 'NEVER') return null
+  if (schedule === "NEVER") return null;
 
-  const next = new Date(from)
+  const next = new Date(from);
 
   switch (schedule) {
-    case 'DAILY':
-      next.setDate(next.getDate() + 1)
-      break
-    case 'WEEKLY':
-      next.setDate(next.getDate() + 7)
-      break
-    case 'MONTHLY':
-      next.setMonth(next.getMonth() + 1)
-      break
+    case "DAILY":
+      next.setDate(next.getDate() + 1);
+      break;
+    case "WEEKLY":
+      next.setDate(next.getDate() + 7);
+      break;
+    case "MONTHLY":
+      next.setMonth(next.getMonth() + 1);
+      break;
   }
 
-  return next
+  return next;
 }
 
 /**
  * Process sources that are due for automatic rescraping
  */
 async function processScheduledRescrapes() {
-  console.log('[Scheduler] Checking for sources due for automatic rescraping...')
+  console.log(
+    "[Scheduler] Checking for sources due for automatic rescraping..."
+  );
 
   try {
     // Find all sources where:
@@ -49,14 +51,11 @@ async function processScheduledRescrapes() {
     const dueForRescrape = await prisma.source.findMany({
       where: {
         rescrapeSchedule: {
-          not: 'NEVER',
+          not: "NEVER",
         },
-        OR: [
-          { nextScrapeAt: null },
-          { nextScrapeAt: { lte: new Date() } },
-        ],
+        OR: [{ nextScrapeAt: null }, { nextScrapeAt: { lte: new Date() } }],
         status: {
-          notIn: ['PENDING', 'INDEXING'],
+          notIn: ["PENDING", "INDEXING"],
         },
       },
       select: {
@@ -66,63 +65,70 @@ async function processScheduledRescrapes() {
         nextScrapeAt: true,
         scope: true,
       },
-    })
+    });
 
-    console.log(`[Scheduler] Found ${dueForRescrape.length} sources due for rescraping`)
+    console.log(
+      `[Scheduler] Found ${dueForRescrape.length} sources due for rescraping`
+    );
 
     // Process each source
     for (const source of dueForRescrape) {
       try {
         console.log(
           `[Scheduler] Queueing automatic rescrape for ${source.domain} (${source.rescrapeSchedule})`
-        )
+        );
 
         // Update source status and schedule
-        const now = new Date()
-        const nextScrapeAt = calculateNextScrapeAt(source.rescrapeSchedule as any, now)
+        const now = new Date();
+        const nextScrapeAt = calculateNextScrapeAt(
+          source.rescrapeSchedule as any,
+          now
+        );
 
         await prisma.source.update({
           where: { id: source.id },
           data: {
-            status: 'PENDING',
+            status: "PENDING",
             nextScrapeAt,
             lastAutomatedScrapeAt: now,
             errorMessage: null,
           },
-        })
+        });
 
         // Create a job record
         await prisma.job.create({
           data: {
             sourceId: source.id,
-            type: 'SCRAPE',
-            status: 'PENDING',
+            type: "SCRAPE",
+            status: "PENDING",
             progress: {
               pagesScraped: 0,
               total: 0,
               automated: true, // Mark as automated rescrape
             },
           },
-        })
+        });
 
         // Queue the scraping job
-        await addScrapeJob(source.id)
+        await addScrapeJob(source.id);
 
         console.log(
-          `[Scheduler] Successfully queued ${source.domain}. Next scrape: ${nextScrapeAt?.toISOString() || 'N/A'}`
-        )
+          `[Scheduler] Successfully queued ${source.domain}. Next scrape: ${
+            nextScrapeAt?.toISOString() || "N/A"
+          }`
+        );
       } catch (error) {
         console.error(
           `[Scheduler] Error queueing rescrape for ${source.domain}:`,
           error
-        )
+        );
         // Continue with other sources even if one fails
       }
     }
 
-    console.log('[Scheduler] Automatic rescrape check completed')
+    console.log("[Scheduler] Automatic rescrape check completed");
   } catch (error) {
-    console.error('[Scheduler] Error in processScheduledRescrapes:', error)
+    console.error("[Scheduler] Error in processScheduledRescrapes:", error);
   }
 }
 
@@ -131,30 +137,30 @@ async function processScheduledRescrapes() {
  * Runs every hour at the top of the hour
  */
 export function startScheduler() {
-  console.log('[Scheduler] Starting automatic rescrape scheduler')
-  console.log('[Scheduler] Will check for due sources every hour')
+  console.log("[Scheduler] Starting automatic rescrape scheduler");
+  console.log("[Scheduler] Will check for due sources every hour");
 
   // Run every hour at minute 0
   // Pattern: "0 * * * *" = At minute 0 of every hour
-  const task = cron.schedule('0 * * * *', processScheduledRescrapes, {
-    timezone: 'UTC',
-  })
+  const task = cron.schedule("0 * * * *", processScheduledRescrapes, {
+    timezone: "UTC",
+  });
 
   // Also run once immediately on startup (after a short delay)
   setTimeout(() => {
-    console.log('[Scheduler] Running initial check...')
-    processScheduledRescrapes()
-  }, 10000) // Wait 10 seconds after startup
+    console.log("[Scheduler] Running initial check...");
+    processScheduledRescrapes();
+  }, 10000); // Wait 10 seconds after startup
 
-  return task
+  return task;
 }
 
 /**
  * Stop the scheduler
  */
-export function stopScheduler(task: cron.ScheduledTask) {
-  console.log('[Scheduler] Stopping automatic rescrape scheduler')
-  task.stop()
+export function stopScheduler(task: ReturnType<typeof cron.schedule>) {
+  console.log("[Scheduler] Stopping automatic rescrape scheduler");
+  task.stop();
 }
 
 /**
@@ -162,10 +168,10 @@ export function stopScheduler(task: cron.ScheduledTask) {
  */
 export async function updateSourceSchedule(
   sourceId: string,
-  schedule: 'NEVER' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
+  schedule: "NEVER" | "DAILY" | "WEEKLY" | "MONTHLY"
 ) {
   const nextScrapeAt =
-    schedule === 'NEVER' ? null : calculateNextScrapeAt(schedule)
+    schedule === "NEVER" ? null : calculateNextScrapeAt(schedule);
 
   await prisma.source.update({
     where: { id: sourceId },
@@ -173,11 +179,11 @@ export async function updateSourceSchedule(
       rescrapeSchedule: schedule,
       nextScrapeAt,
     },
-  })
+  });
 
   console.log(
     `[Scheduler] Updated schedule for source ${sourceId}: ${schedule}${
-      nextScrapeAt ? ` (next: ${nextScrapeAt.toISOString()})` : ''
+      nextScrapeAt ? ` (next: ${nextScrapeAt.toISOString()})` : ""
     }`
-  )
+  );
 }

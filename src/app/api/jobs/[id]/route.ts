@@ -4,11 +4,12 @@
  * GET /api/jobs/[id] - Get job status and progress
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getApiSession } from '@/lib/auth/api'
-import { prisma } from '@/lib/db'
+import { getApiSession } from "@/lib/auth/api";
+import { prisma } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/jobs/[id]
@@ -19,12 +20,12 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const jobId = params.id
+    const jobId = params.id;
 
     const job = await prisma.job.findUnique({
       where: { id: jobId },
@@ -35,6 +36,7 @@ export async function GET(
             url: true,
             domain: true,
             status: true,
+            scope: true,
             workspaceSources: {
               select: {
                 workspaceId: true,
@@ -43,33 +45,36 @@ export async function GET(
           },
         },
       },
-    })
+    });
 
     if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 })
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    // Verify user has access to this job's source workspace
-    const hasAccess = await prisma.workspaceMember.findFirst({
-      where: {
-        userId: session.user.id,
-        workspaceId: {
-          in: job.source.workspaceSources.map((ws) => ws.workspaceId),
+    // Verify user has access to this job's source
+    // For global sources, any authenticated user can access
+    // For workspace sources, user must be the owner of the workspace
+    if (job.source.scope === "WORKSPACE") {
+      const hasAccess = await prisma.workspaceSource.findFirst({
+        where: {
+          sourceId: job.sourceId,
+          workspace: {
+            ownerId: session.user.id,
+          },
         },
-      },
-    })
+      });
 
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+      if (!hasAccess) {
+        return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      }
     }
 
-    return NextResponse.json({ job })
-
+    return NextResponse.json({ job });
   } catch (error: any) {
-    console.error(`[API] GET /api/jobs/${params.id} error:`, error)
+    console.error(`[API] GET /api/jobs/${params.id} error:`, error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }

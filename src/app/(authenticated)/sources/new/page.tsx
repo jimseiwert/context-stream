@@ -1,26 +1,39 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Loader2, ArrowLeft, Globe, Github, Database, Shield } from "lucide-react"
-import { toast } from "sonner"
-import Link from "next/link"
-import { useCreateSource } from "@/hooks/use-sources"
-import { useSession } from "@/lib/auth/client"
+} from "@/components/ui/select";
+import { useCreateSource } from "@/hooks/use-sources";
+import { useSession } from "@/lib/auth/client";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  ArrowLeft,
+  Database,
+  Github,
+  Globe,
+  Loader2,
+  Shield,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 
 const createSourceSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
@@ -28,18 +41,20 @@ const createSourceSchema = z.object({
   scope: z.enum(["GLOBAL", "WORKSPACE"]).optional(),
   maxPages: z.number().min(1).max(10000).optional(),
   respectRobotsTxt: z.boolean().optional(),
-})
+});
 
-type CreateSourceFormData = z.infer<typeof createSourceSchema>
+type CreateSourceFormData = z.infer<typeof createSourceSchema>;
 
 export default function NewSourcePage() {
-  const router = useRouter()
-  const createSource = useCreateSource()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const { data: session } = useSession()
+  const router = useRouter();
+  const createSource = useCreateSource();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data: session } = useSession();
 
   // Check if user is admin
-  const isAdmin = session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN'
+  const isAdmin =
+    (session?.user as any)?.role === "ADMIN" ||
+    (session?.user as any)?.role === "SUPER_ADMIN";
 
   const {
     register,
@@ -55,13 +70,13 @@ export default function NewSourcePage() {
       maxPages: 1000,
       respectRobotsTxt: true,
     },
-  })
+  });
 
-  const selectedType = watch("type")
-  const selectedScope = watch("scope")
+  const selectedType = watch("type");
+  const selectedScope = watch("scope");
 
   const onSubmit = async (data: CreateSourceFormData) => {
-    setIsSubmitting(true)
+    setIsSubmitting(true);
     try {
       // API will automatically use user's personal workspace (for WORKSPACE sources)
       const result = await createSource.mutateAsync({
@@ -72,40 +87,41 @@ export default function NewSourcePage() {
           maxPages: data.maxPages,
           respectRobotsTxt: data.respectRobotsTxt,
         },
-      })
+      });
 
       if (result.isGlobal || data.scope === "GLOBAL") {
         toast.success("Global source created!", {
-          description: "This source will be available to all users once indexing completes."
-        })
+          description:
+            "This source will be available to all users once indexing completes.",
+        });
       } else {
         toast.success("Source created!", {
-          description: "Indexing has started for your workspace."
-        })
+          description: "Indexing has started for your workspace.",
+        });
       }
 
-      router.push("/sources")
+      router.push("/sources");
     } catch (error: any) {
-      console.error("Error creating source:", error)
+      console.error("Error creating source:", error);
       // Error toast is handled by the mutation
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const getSourceTypeIcon = (type: string) => {
     switch (type) {
       case "GITHUB":
-        return <Github className="h-4 w-4" />
+        return <Github className="h-4 w-4" />;
       case "WEBSITE":
-        return <Globe className="h-4 w-4" />
+        return <Globe className="h-4 w-4" />;
       case "CONFLUENCE":
       case "CUSTOM":
-        return <Database className="h-4 w-4" />
+        return <Database className="h-4 w-4" />;
       default:
-        return <Globe className="h-4 w-4" />
+        return <Globe className="h-4 w-4" />;
     }
-  }
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -198,7 +214,9 @@ export default function NewSourcePage() {
                 </SelectContent>
               </Select>
               {errors.type && (
-                <p className="text-sm text-destructive">{errors.type.message}</p>
+                <p className="text-sm text-destructive">
+                  {errors.type.message}
+                </p>
               )}
             </div>
 
@@ -237,7 +255,9 @@ export default function NewSourcePage() {
                   </SelectContent>
                 </Select>
                 {errors.scope && (
-                  <p className="text-sm text-destructive">{errors.scope.message}</p>
+                  <p className="text-sm text-destructive">
+                    {errors.scope.message}
+                  </p>
                 )}
                 <p className="text-xs text-muted-foreground">
                   {selectedScope === "GLOBAL"
@@ -281,7 +301,10 @@ export default function NewSourcePage() {
                   disabled={isSubmitting}
                   {...register("respectRobotsTxt")}
                 />
-                <Label htmlFor="respectRobotsTxt" className="font-normal cursor-pointer">
+                <Label
+                  htmlFor="respectRobotsTxt"
+                  className="font-normal cursor-pointer"
+                >
                   Respect robots.txt restrictions
                 </Label>
               </div>
@@ -325,7 +348,8 @@ export default function NewSourcePage() {
               </div>
             </div>
             <p>
-              ContextStream will crawl the documentation site and extract all pages
+              ContextStream will crawl the documentation site and extract all
+              pages
             </p>
           </div>
           <div className="flex items-start space-x-2">
@@ -334,9 +358,7 @@ export default function NewSourcePage() {
                 <span className="text-xs font-semibold text-primary">2</span>
               </div>
             </div>
-            <p>
-              Content is chunked and embedded for optimal AI retrieval
-            </p>
+            <p>Content is chunked and embedded for optimal AI retrieval</p>
           </div>
           <div className="flex items-start space-x-2">
             <div className="flex-shrink-0 mt-0.5">
@@ -345,11 +367,12 @@ export default function NewSourcePage() {
               </div>
             </div>
             <p>
-              Once complete, the documentation will be searchable and accessible via MCP
+              Once complete, the documentation will be searchable and accessible
+              via MCP
             </p>
           </div>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

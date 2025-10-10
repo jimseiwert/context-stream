@@ -1,11 +1,11 @@
 // Stripe Webhook Handler
 // Processes Stripe events and updates subscription status
 
-import { prisma } from '@/lib/db'
-import Stripe from 'stripe'
-import { PlanTier, SubscriptionStatus } from '@prisma/client'
-import { PLANS } from '../subscriptions/plans'
-import { getNextResetDate } from '../subscriptions/usage-tracker'
+import { prisma } from "@/lib/db";
+import { PlanTier, SubscriptionStatus } from "@prisma/client";
+import Stripe from "stripe";
+import { PLANS } from "../subscriptions/plans";
+import { getNextResetDate } from "../subscriptions/usage-tracker";
 
 /**
  * Handle checkout session completed
@@ -14,29 +14,31 @@ import { getNextResetDate } from '../subscriptions/usage-tracker'
 export async function handleCheckoutCompleted(
   session: Stripe.Checkout.Session
 ): Promise<void> {
-  const userId = session.metadata?.userId
-  const subscriptionId = session.subscription as string
+  const userId = session.metadata?.userId;
+  const subscriptionId = session.subscription as string;
 
   if (!userId || !subscriptionId) {
-    console.error('Missing userId or subscriptionId in checkout session')
-    return
+    console.error("Missing userId or subscriptionId in checkout session");
+    return;
   }
 
   // Get subscription details from Stripe
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2024-12-18.acacia',
-  })
-  const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+    apiVersion: "2025-09-30.clover",
+  });
+  const stripeSubscription = await stripe.subscriptions.retrieve(
+    subscriptionId
+  );
 
-  const priceId = stripeSubscription.items.data[0].price.id
-  const planTier = getPlanTierFromPriceId(priceId)
+  const priceId = stripeSubscription.items.data[0].price.id;
+  const planTier = getPlanTierFromPriceId(priceId);
 
   if (!planTier) {
-    console.error(`Unknown price ID: ${priceId}`)
-    return
+    console.error(`Unknown price ID: ${priceId}`);
+    return;
   }
 
-  const plan = PLANS[planTier]
+  const plan = PLANS[planTier];
 
   // Create or update subscription
   await prisma.subscription.upsert({
@@ -52,7 +54,9 @@ export async function handleCheckoutCompleted(
       maxWorkspaces: plan.features.maxWorkspaces,
       maxPagesIndexed: plan.features.maxPagesIndexed,
       apiRateLimit: plan.features.apiRateLimit,
-      billingCycle: new Date(stripeSubscription.current_period_start * 1000),
+      billingCycle: new Date(
+        (stripeSubscription as any).current_period_start * 1000
+      ),
       resetAt: getNextResetDate(),
       status: SubscriptionStatus.ACTIVE,
     },
@@ -65,13 +69,15 @@ export async function handleCheckoutCompleted(
       maxWorkspaces: plan.features.maxWorkspaces,
       maxPagesIndexed: plan.features.maxPagesIndexed,
       apiRateLimit: plan.features.apiRateLimit,
-      billingCycle: new Date(stripeSubscription.current_period_start * 1000),
+      billingCycle: new Date(
+        (stripeSubscription as any).current_period_start * 1000
+      ),
       status: SubscriptionStatus.ACTIVE,
       cancelAtPeriodEnd: false,
     },
-  })
+  });
 
-  console.log(`Subscription created/updated for user ${userId}`)
+  console.log(`Subscription created/updated for user ${userId}`);
 }
 
 /**
@@ -80,24 +86,24 @@ export async function handleCheckoutCompleted(
 export async function handleSubscriptionUpdated(
   subscription: Stripe.Subscription
 ): Promise<void> {
-  const userId = subscription.metadata?.userId
-  const subscriptionId = subscription.id
+  const userId = subscription.metadata?.userId;
+  const subscriptionId = subscription.id;
 
   if (!userId) {
-    console.error('Missing userId in subscription metadata')
-    return
+    console.error("Missing userId in subscription metadata");
+    return;
   }
 
-  const priceId = subscription.items.data[0].price.id
-  const planTier = getPlanTierFromPriceId(priceId)
+  const priceId = subscription.items.data[0].price.id;
+  const planTier = getPlanTierFromPriceId(priceId);
 
   if (!planTier) {
-    console.error(`Unknown price ID: ${priceId}`)
-    return
+    console.error(`Unknown price ID: ${priceId}`);
+    return;
   }
 
-  const plan = PLANS[planTier]
-  const status = mapStripeStatus(subscription.status)
+  const plan = PLANS[planTier];
+  const status = mapStripeStatus(subscription.status);
 
   await prisma.subscription.update({
     where: { userId },
@@ -109,13 +115,13 @@ export async function handleSubscriptionUpdated(
       maxWorkspaces: plan.features.maxWorkspaces,
       maxPagesIndexed: plan.features.maxPagesIndexed,
       apiRateLimit: plan.features.apiRateLimit,
-      billingCycle: new Date(subscription.current_period_start * 1000),
+      billingCycle: new Date((subscription as any).current_period_start * 1000),
       status,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
     },
-  })
+  });
 
-  console.log(`Subscription updated for user ${userId}`)
+  console.log(`Subscription updated for user ${userId}`);
 }
 
 /**
@@ -124,15 +130,15 @@ export async function handleSubscriptionUpdated(
 export async function handleSubscriptionDeleted(
   subscription: Stripe.Subscription
 ): Promise<void> {
-  const userId = subscription.metadata?.userId
+  const userId = subscription.metadata?.userId;
 
   if (!userId) {
-    console.error('Missing userId in subscription metadata')
-    return
+    console.error("Missing userId in subscription metadata");
+    return;
   }
 
   // Downgrade to free plan
-  const freePlan = PLANS[PlanTier.FREE]
+  const freePlan = PLANS[PlanTier.FREE];
 
   await prisma.subscription.update({
     where: { userId },
@@ -148,9 +154,9 @@ export async function handleSubscriptionDeleted(
       stripePriceId: null,
       cancelAtPeriodEnd: false,
     },
-  })
+  });
 
-  console.log(`Subscription canceled for user ${userId}, downgraded to FREE`)
+  console.log(`Subscription canceled for user ${userId}, downgraded to FREE`);
 }
 
 /**
@@ -159,20 +165,20 @@ export async function handleSubscriptionDeleted(
 export async function handlePaymentFailed(
   invoice: Stripe.Invoice
 ): Promise<void> {
-  const subscriptionId = invoice.subscription as string
+  const subscriptionId = (invoice as any).subscription as string;
 
   if (!subscriptionId) {
-    console.error('Missing subscription ID in invoice')
-    return
+    console.error("Missing subscription ID in invoice");
+    return;
   }
 
   const subscription = await prisma.subscription.findFirst({
     where: { stripeSubscriptionId: subscriptionId },
-  })
+  });
 
   if (!subscription) {
-    console.error(`Subscription not found: ${subscriptionId}`)
-    return
+    console.error(`Subscription not found: ${subscriptionId}`);
+    return;
   }
 
   await prisma.subscription.update({
@@ -180,30 +186,32 @@ export async function handlePaymentFailed(
     data: {
       status: SubscriptionStatus.PAST_DUE,
     },
-  })
+  });
 
-  console.log(`Payment failed for subscription ${subscriptionId}`)
+  console.log(`Payment failed for subscription ${subscriptionId}`);
 }
 
 /**
  * Map Stripe subscription status to our status enum
  */
-function mapStripeStatus(stripeStatus: Stripe.Subscription.Status): SubscriptionStatus {
+function mapStripeStatus(
+  stripeStatus: Stripe.Subscription.Status
+): SubscriptionStatus {
   switch (stripeStatus) {
-    case 'active':
-      return SubscriptionStatus.ACTIVE
-    case 'past_due':
-      return SubscriptionStatus.PAST_DUE
-    case 'canceled':
-    case 'unpaid':
-      return SubscriptionStatus.CANCELED
-    case 'trialing':
-      return SubscriptionStatus.TRIALING
-    case 'incomplete':
-    case 'incomplete_expired':
-      return SubscriptionStatus.INCOMPLETE
+    case "active":
+      return SubscriptionStatus.ACTIVE;
+    case "past_due":
+      return SubscriptionStatus.PAST_DUE;
+    case "canceled":
+    case "unpaid":
+      return SubscriptionStatus.CANCELED;
+    case "trialing":
+      return SubscriptionStatus.TRIALING;
+    case "incomplete":
+    case "incomplete_expired":
+      return SubscriptionStatus.INCOMPLETE;
     default:
-      return SubscriptionStatus.ACTIVE
+      return SubscriptionStatus.ACTIVE;
   }
 }
 
@@ -214,9 +222,9 @@ function getPlanTierFromPriceId(priceId: string): PlanTier | null {
   // Check each plan for matching price ID
   for (const [tier, config] of Object.entries(PLANS)) {
     if (config.stripePriceId === priceId) {
-      return tier as PlanTier
+      return tier as PlanTier;
     }
   }
 
-  return null
+  return null;
 }

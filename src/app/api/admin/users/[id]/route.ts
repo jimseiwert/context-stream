@@ -4,16 +4,17 @@
  * DELETE /api/admin/users/[id] - Delete user (future)
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getApiSession } from '@/lib/auth/api'
-import { prisma } from '@/lib/db'
-import { z } from 'zod'
+import { getApiSession } from "@/lib/auth/api";
+import { prisma } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const UpdateUserSchema = z.object({
-  role: z.enum(['USER', 'ADMIN', 'SUPER_ADMIN']),
-})
+  role: z.enum(["USER", "ADMIN", "SUPER_ADMIN"]),
+});
 
 /**
  * PUT /api/admin/users/[id]
@@ -25,33 +26,33 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Check if user has super admin access
     const currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { role: true },
-    })
+    });
 
-    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+    if (!currentUser || currentUser.role !== "SUPER_ADMIN") {
       return NextResponse.json(
-        { error: 'Forbidden - Super Admin access required' },
+        { error: "Forbidden - Super Admin access required" },
         { status: 403 }
-      )
+      );
     }
 
-    const body = await request.json()
-    const data = UpdateUserSchema.parse(body)
+    const body = await request.json();
+    const data = UpdateUserSchema.parse(body);
 
     // Prevent users from changing their own role
     if (params.id === session.user.id) {
       return NextResponse.json(
-        { error: 'Cannot modify your own role' },
+        { error: "Cannot modify your own role" },
         { status: 400 }
-      )
+      );
     }
 
     // Update user role
@@ -68,12 +69,12 @@ export async function PUT(
           },
         },
       },
-    })
+    });
 
     return NextResponse.json({
       user: {
         id: updatedUser.id,
-        name: updatedUser.name || 'Unknown',
+        name: updatedUser.name || "Unknown",
         email: updatedUser.email,
         role: updatedUser.role,
         emailVerified: updatedUser.emailVerified,
@@ -85,24 +86,24 @@ export async function PUT(
           apiKeys: updatedUser._count.apiKeys,
         },
       },
-    })
+    });
   } catch (error: any) {
-    console.error('[API] PUT /api/admin/users/[id] error:', error)
+    console.error("[API] PUT /api/admin/users/[id] error:", error);
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: "Validation error", details: error.errors },
         { status: 400 }
-      )
+      );
     }
 
-    if (error.code === 'P2025') {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    if (error.code === "P2025") {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }

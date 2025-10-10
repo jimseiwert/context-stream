@@ -52,7 +52,7 @@ export const auth = betterAuth({
       },
     },
     // Hook to create personal workspace on user creation
-    onCreate: async (user) => {
+    onCreate: async (user: any) => {
       // Check if this is the first user - if so, make them SUPER_ADMIN
       const userCount = await prisma.user.count();
 

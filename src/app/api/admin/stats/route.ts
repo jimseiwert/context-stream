@@ -3,11 +3,12 @@
  * GET /api/admin/stats - Get admin dashboard statistics
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getApiSession } from '@/lib/auth/api'
-import { prisma } from '@/lib/db'
+import { getApiSession } from "@/lib/auth/api";
+import { prisma } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/admin/stats
@@ -16,19 +17,22 @@ export const runtime = 'nodejs'
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Check if user has admin access
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { role: true },
-    })
+    });
 
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
+    if (!user || (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN")) {
+      return NextResponse.json(
+        { error: "Forbidden - Admin access required" },
+        { status: 403 }
+      );
     }
 
     // Get statistics
@@ -65,45 +69,49 @@ export async function GET(request: NextRequest) {
 
       // Global sources
       prisma.source.count({
-        where: { scope: 'GLOBAL' },
+        where: { scope: "GLOBAL" },
       }),
 
       // Workspace sources
       prisma.source.count({
-        where: { scope: 'WORKSPACE' },
+        where: { scope: "WORKSPACE" },
       }),
 
       // Recent activity (last 50 events)
-      prisma.queryLog.findMany({
-        take: 50,
-        orderBy: { createdAt: 'desc' },
-      }).catch(() => []),
-    ])
+      prisma.queryLog
+        .findMany({
+          take: 50,
+          orderBy: { createdAt: "desc" },
+        })
+        .catch(() => []),
+    ]);
 
     // Format recent activity
     const formattedActivity = await Promise.all(
       recentActivity.map(async (log) => {
         // Get user separately in case relationship doesn't exist yet
-        let user = null
+        let user = null;
         if (log.userId) {
-          user = await prisma.user.findUnique({
-            where: { id: log.userId },
-            select: { name: true, email: true },
-          }).catch(() => null)
+          user = await prisma.user
+            .findUnique({
+              where: { id: log.userId },
+              select: { name: true, email: true },
+            })
+            .catch(() => null);
         }
 
         return {
           id: log.id,
-          type: 'SEARCH_QUERY',
+          type: "SEARCH_QUERY",
           description: `Searched for "${log.query}" - ${log.resultsCount} results`,
           timestamp: log.createdAt.toISOString(),
           user: {
-            name: user?.name || 'Unknown User',
-            email: user?.email || 'unknown@example.com',
+            name: user?.name || "Unknown User",
+            email: user?.email || "unknown@example.com",
           },
-        }
+        };
       })
-    )
+    );
 
     return NextResponse.json({
       totalUsers,
@@ -114,12 +122,12 @@ export async function GET(request: NextRequest) {
       totalQueries,
       activeUsers,
       recentActivity: formattedActivity,
-    })
+    });
   } catch (error: any) {
-    console.error('[API] GET /api/admin/stats error:', error)
+    console.error("[API] GET /api/admin/stats error:", error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }

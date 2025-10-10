@@ -1,15 +1,17 @@
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import Link from "next/link"
+export const dynamic = "force-dynamic";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
+  Code2,
   Database,
   Search,
+  Shield,
   Sparkles,
   Zap,
-  Shield,
-  Code2
-} from "lucide-react"
+} from "lucide-react";
+import Link from "next/link";
 
 export default function LandingPage() {
   return (
@@ -29,9 +31,7 @@ export default function LandingPage() {
               Login
             </Link>
             <Button asChild>
-              <Link href="/register">
-                Get Started
-              </Link>
+              <Link href="/register">Get Started</Link>
             </Button>
           </nav>
         </div>
@@ -46,11 +46,14 @@ export default function LandingPage() {
             </Badge>
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
               Make Any Documentation
-              <span className="block text-primary mt-2">AI-Accessible in Minutes</span>
+              <span className="block text-primary mt-2">
+                AI-Accessible in Minutes
+              </span>
             </h1>
             <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
-              ContextStream indexes websites and codebases, making them instantly searchable
-              through Claude Desktop and other AI tools via the Model Context Protocol.
+              ContextStream indexes websites and codebases, making them
+              instantly searchable through Claude Desktop and other AI tools via
+              the Model Context Protocol.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" asChild>
@@ -60,7 +63,10 @@ export default function LandingPage() {
                 </Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
-                <Link href="https://github.com/contextstream/contextstream" target="_blank">
+                <Link
+                  href="https://github.com/contextstream/contextstream"
+                  target="_blank"
+                >
                   <Code2 className="mr-2 h-4 w-4" />
                   View on GitHub
                 </Link>
@@ -74,9 +80,12 @@ export default function LandingPage() {
       <section className="py-20 border-t">
         <div className="container px-4">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold">Built for AI-First Developers</h2>
+            <h2 className="text-3xl font-bold">
+              Built for AI-First Developers
+            </h2>
             <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-              ContextStream seamlessly integrates documentation into your AI workflow
+              ContextStream seamlessly integrates documentation into your AI
+              workflow
             </p>
           </div>
 
@@ -87,7 +96,8 @@ export default function LandingPage() {
               </div>
               <h3 className="mt-4 text-xl font-semibold">Instant Indexing</h3>
               <p className="mt-2 text-muted-foreground">
-                Add any documentation site or GitHub repo. We'll scrape, chunk, and embed it for optimal AI retrieval.
+                Add any documentation site or GitHub repo. We'll scrape, chunk,
+                and embed it for optimal AI retrieval.
               </p>
             </div>
 
@@ -97,7 +107,8 @@ export default function LandingPage() {
               </div>
               <h3 className="mt-4 text-xl font-semibold">MCP Integration</h3>
               <p className="mt-2 text-muted-foreground">
-                Works seamlessly with Claude Desktop and other MCP-compatible AI tools for context-aware assistance.
+                Works seamlessly with Claude Desktop and other MCP-compatible AI
+                tools for context-aware assistance.
               </p>
             </div>
 
@@ -107,7 +118,8 @@ export default function LandingPage() {
               </div>
               <h3 className="mt-4 text-xl font-semibold">Hybrid Search</h3>
               <p className="mt-2 text-muted-foreground">
-                Combines BM25 and semantic search for accurate results, whether you search via web or AI.
+                Combines BM25 and semantic search for accurate results, whether
+                you search via web or AI.
               </p>
             </div>
 
@@ -117,7 +129,8 @@ export default function LandingPage() {
               </div>
               <h3 className="mt-4 text-xl font-semibold">Global Sources</h3>
               <p className="mt-2 text-muted-foreground">
-                Popular docs like React, Python, and Vue are pre-indexed. Add them instantly without waiting.
+                Popular docs like React, Python, and Vue are pre-indexed. Add
+                them instantly without waiting.
               </p>
             </div>
 
@@ -127,7 +140,8 @@ export default function LandingPage() {
               </div>
               <h3 className="mt-4 text-xl font-semibold">Secure & Private</h3>
               <p className="mt-2 text-muted-foreground">
-                Your private documentation stays private. Role-based access ensures the right people see the right docs.
+                Your private documentation stays private. Role-based access
+                ensures the right people see the right docs.
               </p>
             </div>
 
@@ -137,7 +151,8 @@ export default function LandingPage() {
               </div>
               <h3 className="mt-4 text-xl font-semibold">Open Source</h3>
               <p className="mt-2 text-muted-foreground">
-                Self-host for complete control or use our cloud service. MIT licensed and community-driven.
+                Self-host for complete control or use our cloud service. MIT
+                licensed and community-driven.
               </p>
             </div>
           </div>
@@ -148,9 +163,12 @@ export default function LandingPage() {
       <section className="py-20 border-t">
         <div className="container px-4">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-3xl font-bold">Ready to Enhance Your AI Workflow?</h2>
+            <h2 className="text-3xl font-bold">
+              Ready to Enhance Your AI Workflow?
+            </h2>
             <p className="mt-4 text-lg text-muted-foreground">
-              Join thousands of developers using ContextStream to make documentation instantly accessible to AI.
+              Join thousands of developers using ContextStream to make
+              documentation instantly accessible to AI.
             </p>
             <div className="mt-8">
               <Button size="lg" asChild>
@@ -203,5 +221,5 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

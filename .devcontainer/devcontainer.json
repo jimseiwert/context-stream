@@ -79,12 +79,6 @@
 
   "postCreateCommand": "npm install && npx prisma generate",
 
-  "remoteEnv": {
-    "DATABASE_URL": "postgresql://contextstream:changeme@postgres:5432/contextstream",
-    "REDIS_URL": "redis://redis:6379",
-    "NODE_ENV": "development"
-  },
-
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   }

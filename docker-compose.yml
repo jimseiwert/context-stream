@@ -61,7 +61,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - NODE_ENV=development
+      # - NODE_ENV=development
       # Database and Redis URLs are constructed from environment variables
       - DATABASE_URL=postgresql://${POSTGRES_USER:-contextstream}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-contextstream}
       - REDIS_URL=redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379
@@ -89,7 +89,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - NODE_ENV=development
+      # - NODE_ENV=development
       # Database and Redis URLs are constructed from environment variables
       - DATABASE_URL=postgresql://${POSTGRES_USER:-contextstream}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-contextstream}
       - REDIS_HOST=redis

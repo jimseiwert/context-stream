@@ -5,33 +5,37 @@
  * POST /api/sources - Create new source
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getApiSession } from '@/lib/auth/api'
-import { prisma } from '@/lib/db'
-import { addScrapeJob } from '@/lib/jobs/queue'
-import { z } from 'zod'
-import { checkQuota, QuotaType } from '@/lib/subscriptions/quota-checker'
-import { trackUsage } from '@/lib/subscriptions/usage-tracker'
-import { UsageEventType } from '@prisma/client'
-import { IS_SAAS_MODE } from '@/lib/config/features'
+import { getApiSession } from "@/lib/auth/api";
+import { IS_SAAS_MODE } from "@/lib/config/features";
+import { prisma } from "@/lib/db";
+import { addScrapeJob } from "@/lib/jobs/queue";
+import { checkQuota, QuotaType } from "@/lib/subscriptions/quota-checker";
+import { trackUsage } from "@/lib/subscriptions/usage-tracker";
+import { UsageEventType } from "@prisma/client";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
-export const runtime = 'nodejs'
+export const dynamic = "force-dynamic";
+
+export const runtime = "nodejs";
 
 // Validation schemas
 const CreateSourceSchema = z.object({
-  url: z.string().url('Invalid URL format'),
-  workspaceId: z.string().uuid('Invalid workspace ID').optional(),
-  type: z.enum(['WEBSITE', 'GITHUB', 'CONFLUENCE', 'CUSTOM']),
-  scope: z.enum(['GLOBAL', 'WORKSPACE']).optional(), // Only admins can set to GLOBAL
-  config: z.object({
-    maxPages: z.number().min(1).max(10000).optional(),
-    maxDepth: z.number().min(1).max(10).optional(),
-    includePatterns: z.array(z.string()).optional(),
-    excludePatterns: z.array(z.string()).optional(),
-    respectRobotsTxt: z.boolean().optional(),
-    userAgent: z.string().optional(),
-  }).optional(),
-})
+  url: z.string().url("Invalid URL format"),
+  workspaceId: z.string().uuid("Invalid workspace ID").optional(),
+  type: z.enum(["WEBSITE", "GITHUB", "CONFLUENCE", "CUSTOM"]),
+  scope: z.enum(["GLOBAL", "WORKSPACE"]).optional(), // Only admins can set to GLOBAL
+  config: z
+    .object({
+      maxPages: z.number().min(1).max(10000).optional(),
+      maxDepth: z.number().min(1).max(10).optional(),
+      includePatterns: z.array(z.string()).optional(),
+      excludePatterns: z.array(z.string()).optional(),
+      respectRobotsTxt: z.boolean().optional(),
+      userAgent: z.string().optional(),
+    })
+    .optional(),
+});
 
 /**
  * GET /api/sources
@@ -40,18 +44,18 @@ const CreateSourceSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     // Authentication check
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Parse query parameters
-    const searchParams = request.nextUrl.searchParams
-    let workspaceId = searchParams.get('workspaceId')
-    const scope = searchParams.get('scope') // 'GLOBAL' | 'WORKSPACE' | undefined
-    const status = searchParams.get('status')
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
+    const searchParams = request.nextUrl.searchParams;
+    let workspaceId = searchParams.get("workspaceId");
+    const scope = searchParams.get("scope"); // 'GLOBAL' | 'WORKSPACE' | undefined
+    const status = searchParams.get("status");
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
 
     // If no workspaceId provided, use user's personal workspace
     if (!workspaceId) {
@@ -60,24 +64,24 @@ export async function GET(request: NextRequest) {
           ownerId: session.user.id,
         },
         orderBy: {
-          createdAt: 'asc', // Get the first workspace (personal workspace)
+          createdAt: "asc", // Get the first workspace (personal workspace)
         },
-      })
+      });
 
       if (userWorkspace) {
-        workspaceId = userWorkspace.id
+        workspaceId = userWorkspace.id;
       }
     }
 
     // Build query
-    const where: any = {}
+    const where: any = {};
 
     if (scope) {
-      where.scope = scope
+      where.scope = scope;
     }
 
     if (status) {
-      where.status = status
+      where.status = status;
     }
 
     // If workspace ID is available, filter by workspace sources
@@ -88,10 +92,13 @@ export async function GET(request: NextRequest) {
           id: workspaceId,
           ownerId: session.user.id,
         },
-      })
+      });
 
       if (!workspace) {
-        return NextResponse.json({ error: 'Workspace not found or access denied' }, { status: 404 })
+        return NextResponse.json(
+          { error: "Workspace not found or access denied" },
+          { status: 404 }
+        );
       }
 
       // Get sources for this workspace (both GLOBAL and workspace-specific)
@@ -99,10 +106,10 @@ export async function GET(request: NextRequest) {
         where: {
           ...where,
           OR: [
-            { scope: 'GLOBAL' },
+            { scope: "GLOBAL" },
             {
               AND: [
-                { scope: 'WORKSPACE' },
+                { scope: "WORKSPACE" },
                 {
                   workspaceSources: {
                     some: {
@@ -123,34 +130,34 @@ export async function GET(request: NextRequest) {
           },
         },
         orderBy: {
-          createdAt: 'desc',
+          createdAt: "desc",
         },
         skip: (page - 1) * limit,
         take: limit,
-      })
+      });
 
-      const total = await prisma.source.count({ where })
+      const total = await prisma.source.count({ where });
 
       // Format sources to match frontend expectations
-      const formattedSources = sources.map(source => ({
+      const formattedSources = sources.map((source) => ({
         ...source,
         pageCount: source._count.pages,
         config: source.config || undefined,
-      }))
+      }));
 
       return NextResponse.json({
         sources: formattedSources,
         summary: {
           total,
-          global: sources.filter(s => s.scope === 'GLOBAL').length,
-          workspace: sources.filter(s => s.scope === 'WORKSPACE').length,
+          global: sources.filter((s) => s.scope === "GLOBAL").length,
+          workspace: sources.filter((s) => s.scope === "WORKSPACE").length,
         },
-      })
+      });
     }
 
     // If no workspace ID, return only GLOBAL sources (for admin or public access)
     if (!workspaceId) {
-      where.scope = 'GLOBAL'
+      where.scope = "GLOBAL";
     }
 
     const sources = await prisma.source.findMany({
@@ -164,36 +171,35 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
       skip: (page - 1) * limit,
       take: limit,
-    })
+    });
 
-    const total = await prisma.source.count({ where })
+    const total = await prisma.source.count({ where });
 
     // Format sources to match frontend expectations
-    const formattedSources = sources.map(source => ({
+    const formattedSources = sources.map((source) => ({
       ...source,
       pageCount: source._count.pages,
       config: source.config || undefined,
-    }))
+    }));
 
     return NextResponse.json({
       sources: formattedSources,
       summary: {
         total,
-        global: sources.filter(s => s.scope === 'GLOBAL').length,
-        workspace: sources.filter(s => s.scope === 'WORKSPACE').length,
+        global: sources.filter((s) => s.scope === "GLOBAL").length,
+        workspace: sources.filter((s) => s.scope === "WORKSPACE").length,
       },
-    })
-
+    });
   } catch (error: any) {
-    console.error('[API] GET /api/sources error:', error)
+    console.error("[API] GET /api/sources error:", error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }
 
@@ -209,74 +215,74 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Authentication check
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Parse and validate request body
-    const body = await request.json()
-    const data = CreateSourceSchema.parse(body)
+    const body = await request.json();
+    const data = CreateSourceSchema.parse(body);
 
     // Check source quota (SaaS only)
     if (IS_SAAS_MODE) {
-      const quotaCheck = await checkQuota(session.user.id, QuotaType.SOURCE)
+      const quotaCheck = await checkQuota(session.user.id, QuotaType.SOURCE);
       if (!quotaCheck.allowed) {
         return NextResponse.json(
           {
-            error: 'Source quota exceeded',
+            error: "Source quota exceeded",
             message: quotaCheck.reason,
             usage: quotaCheck.usage,
             limit: quotaCheck.limit,
-            upgradeUrl: '/pricing',
+            upgradeUrl: "/pricing",
           },
           { status: 402 } // Payment Required
-        )
+        );
       }
     }
 
     // Check if user is trying to create a GLOBAL source
-    let targetScope: 'GLOBAL' | 'WORKSPACE' = 'WORKSPACE'
-    if (data.scope === 'GLOBAL') {
+    let targetScope: "GLOBAL" | "WORKSPACE" = "WORKSPACE";
+    if (data.scope === "GLOBAL") {
       // Verify user is ADMIN or SUPER_ADMIN
       const user = await prisma.user.findUnique({
         where: { id: session.user.id },
         select: { role: true },
-      })
+      });
 
-      if (user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN')) {
-        targetScope = 'GLOBAL'
+      if (user && (user.role === "ADMIN" || user.role === "SUPER_ADMIN")) {
+        targetScope = "GLOBAL";
       } else {
         return NextResponse.json(
-          { error: 'Only admins can create global sources' },
+          { error: "Only admins can create global sources" },
           { status: 403 }
-        )
+        );
       }
     }
 
     // Get workspace ID - use provided or user's personal workspace (not needed for GLOBAL sources)
-    let workspaceId = data.workspaceId
+    let workspaceId = data.workspaceId;
 
     // Skip workspace validation for GLOBAL sources
-    if (targetScope === 'WORKSPACE') {
+    if (targetScope === "WORKSPACE") {
       if (!workspaceId) {
         const userWorkspace = await prisma.workspace.findFirst({
           where: {
             ownerId: session.user.id,
           },
           orderBy: {
-            createdAt: 'asc',
+            createdAt: "asc",
           },
-        })
+        });
 
         if (!userWorkspace) {
           return NextResponse.json(
-            { error: 'No workspace found. Please create a workspace first.' },
+            { error: "No workspace found. Please create a workspace first." },
             { status: 404 }
-          )
+          );
         }
 
-        workspaceId = userWorkspace.id
+        workspaceId = userWorkspace.id;
       }
 
       // Verify user has access to workspace (owner check)
@@ -285,68 +291,72 @@ export async function POST(request: NextRequest) {
           id: workspaceId,
           ownerId: session.user.id,
         },
-      })
+      });
 
       if (!workspace) {
         return NextResponse.json(
-          { error: 'Workspace not found or access denied' },
+          { error: "Workspace not found or access denied" },
           { status: 404 }
-        )
+        );
       }
     }
 
     // Normalize URL (remove trailing slash, etc.)
-    const normalizedUrl = data.url.replace(/\/$/, '')
+    const normalizedUrl = data.url.replace(/\/$/, "");
 
     // 1. Check if URL exists as GLOBAL source
     const existingGlobalSource = await prisma.source.findFirst({
       where: {
         url: normalizedUrl,
-        scope: 'GLOBAL',
+        scope: "GLOBAL",
       },
-    })
+    });
 
     if (existingGlobalSource) {
-      // Check if already linked to this workspace
-      const existingLink = await prisma.workspaceSource.findUnique({
-        where: {
-          workspaceId_sourceId: {
+      // For GLOBAL sources, we don't need to check workspace links
+      if (targetScope === "WORKSPACE" && workspaceId) {
+        // Check if already linked to this workspace
+        const existingLink = await prisma.workspaceSource.findUnique({
+          where: {
+            workspaceId_sourceId: {
+              workspaceId: workspaceId,
+              sourceId: existingGlobalSource.id,
+            },
+          },
+        });
+
+        if (existingLink) {
+          return NextResponse.json(
+            { error: "This global source is already added to your workspace" },
+            { status: 409 }
+          );
+        }
+
+        // Link global source to workspace (instant add, no scraping needed)
+        await prisma.workspaceSource.create({
+          data: {
             workspaceId: workspaceId,
             sourceId: existingGlobalSource.id,
           },
-        },
-      })
-
-      if (existingLink) {
-        return NextResponse.json(
-          { error: 'This global source is already added to your workspace' },
-          { status: 409 }
-        )
+        });
       }
-
-      // Link global source to workspace (instant add, no scraping needed)
-      await prisma.workspaceSource.create({
-        data: {
-          workspaceId,
-          sourceId: existingGlobalSource.id,
-        },
-      })
 
       return NextResponse.json(
         {
           source: existingGlobalSource,
           isGlobal: true,
-          message: 'Global source added to workspace instantly (no scraping needed)',
+          message:
+            "Global source added to workspace instantly (no scraping needed)",
         },
         { status: 201 }
-      )
+      );
     }
 
     // 2. Check if URL exists as WORKSPACE source (belonging to another workspace)
     const existingWorkspaceSource = await prisma.source.findFirst({
       where: {
         url: normalizedUrl,
-        scope: 'WORKSPACE',
+        scope: "WORKSPACE",
       },
       include: {
         workspaceSources: {
@@ -359,23 +369,23 @@ export async function POST(request: NextRequest) {
           },
         },
       },
-    })
+    });
 
     if (existingWorkspaceSource) {
-      const workspaceCount = existingWorkspaceSource.workspaceSources.length
+      const workspaceCount = existingWorkspaceSource.workspaceSources.length;
 
       return NextResponse.json(
         {
-          error: 'This source already exists in another workspace',
+          error: "This source already exists in another workspace",
           suggestion: `This source is used by ${workspaceCount} workspace(s). Consider asking an admin to promote it to a global source for better efficiency.`,
           existingSourceId: existingWorkspaceSource.id,
         },
         { status: 409 }
-      )
+      );
     }
 
     // 3. Create new source with specified scope
-    const domain = new URL(normalizedUrl).hostname
+    const domain = new URL(normalizedUrl).hostname;
 
     const newSource = await prisma.source.create({
       data: {
@@ -383,18 +393,20 @@ export async function POST(request: NextRequest) {
         domain,
         scope: targetScope,
         type: data.type,
-        status: 'PENDING',
+        status: "PENDING",
         config: data.config,
         createdById: session.user.id,
         // Only create workspace link for WORKSPACE sources
-        ...(targetScope === 'WORKSPACE' && workspaceId ? {
-          workspaceSources: {
-            create: {
-              workspaceId,
-              addedBy: session.user.id,
-            },
-          },
-        } : {}),
+        ...(targetScope === "WORKSPACE" && workspaceId
+          ? {
+              workspaceSources: {
+                create: {
+                  workspaceId,
+                  addedBy: session.user.id,
+                },
+              },
+            }
+          : {}),
       },
       include: {
         _count: {
@@ -404,14 +416,14 @@ export async function POST(request: NextRequest) {
           },
         },
       },
-    })
+    });
 
     // Create a job record
     const job = await prisma.job.create({
       data: {
         sourceId: newSource.id,
-        type: 'SCRAPE',
-        status: 'PENDING',
+        type: "SCRAPE",
+        status: "PENDING",
         progress: {
           url: normalizedUrl,
           type: data.type,
@@ -419,10 +431,10 @@ export async function POST(request: NextRequest) {
           total: 0,
         },
       },
-    })
+    });
 
     // Queue scraping job
-    await addScrapeJob(newSource.id)
+    await addScrapeJob(newSource.id);
 
     // Track usage (SaaS only)
     if (IS_SAAS_MODE) {
@@ -437,33 +449,33 @@ export async function POST(request: NextRequest) {
           scope: targetScope,
           workspaceId,
         },
-      })
+      });
     }
 
     return NextResponse.json(
       {
         source: newSource,
         job,
-        message: targetScope === 'GLOBAL'
-          ? 'Global source created and scraping job queued - will be available to all users once indexed'
-          : 'Source created and scraping job queued',
+        message:
+          targetScope === "GLOBAL"
+            ? "Global source created and scraping job queued - will be available to all users once indexed"
+            : "Source created and scraping job queued",
       },
       { status: 201 }
-    )
-
+    );
   } catch (error: any) {
-    console.error('[API] POST /api/sources error:', error)
+    console.error("[API] POST /api/sources error:", error);
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: "Validation error", details: error.errors },
         { status: 400 }
-      )
+      );
     }
 
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }

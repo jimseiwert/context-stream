@@ -3,18 +3,19 @@
  * GET /api/dashboard/stats - Get dashboard statistics
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getApiSession } from '@/lib/auth/api'
-import { prisma } from '@/lib/db'
+import { getApiSession } from "@/lib/auth/api";
+import { prisma } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
     // Authentication check
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Get user's personal workspace
@@ -23,9 +24,9 @@ export async function GET(request: NextRequest) {
         ownerId: session.user.id,
       },
       orderBy: {
-        createdAt: 'asc',
+        createdAt: "asc",
       },
-    })
+    });
 
     if (!workspace) {
       return NextResponse.json(
@@ -40,17 +41,17 @@ export async function GET(request: NextRequest) {
           recentActivity: [],
         },
         { status: 200 }
-      )
+      );
     }
 
     // Get workspace sources (both GLOBAL and WORKSPACE-specific)
     const sources = await prisma.source.findMany({
       where: {
         OR: [
-          { scope: 'GLOBAL' },
+          { scope: "GLOBAL" },
           {
             AND: [
-              { scope: 'WORKSPACE' },
+              { scope: "WORKSPACE" },
               {
                 workspaceSources: {
                   some: {
@@ -75,21 +76,24 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: {
-        lastScrapedAt: 'desc',
+        lastScrapedAt: "desc",
       },
       take: 5, // Get 5 most recent for dashboard
-    })
+    });
 
     // Calculate stats
-    const totalSources = sources.length
-    const totalPages = sources.reduce((sum, source) => sum + source._count.pages, 0)
+    const totalSources = sources.length;
+    const totalPages = sources.reduce(
+      (sum, source) => sum + source._count.pages,
+      0
+    );
 
     // Estimate storage: ~5KB per page (rough estimate)
-    const estimatedStorageKB = totalPages * 5
+    const estimatedStorageKB = totalPages * 5;
 
     // Get recent query count (last 30 days)
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const recentQueries = await prisma.queryLog.count({
       where: {
@@ -98,10 +102,10 @@ export async function GET(request: NextRequest) {
           gte: thirtyDaysAgo,
         },
       },
-    })
+    });
 
     // Format recent sources for dashboard
-    const recentSources = sources.map(source => ({
+    const recentSources = sources.map((source) => ({
       id: source.id,
       name: source.domain,
       url: source.url,
@@ -109,17 +113,17 @@ export async function GET(request: NextRequest) {
       pageCount: source._count.pages,
       lastUpdated: source.lastScrapedAt?.toISOString() || null,
       scope: source.scope,
-    }))
+    }));
 
     // Get recent activity (last 10 jobs)
     const recentJobs = await prisma.job.findMany({
       where: {
         source: {
           OR: [
-            { scope: 'GLOBAL' },
+            { scope: "GLOBAL" },
             {
               AND: [
-                { scope: 'WORKSPACE' },
+                { scope: "WORKSPACE" },
                 {
                   workspaceSources: {
                     some: {
@@ -136,38 +140,40 @@ export async function GET(request: NextRequest) {
         source: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
       take: 10,
-    })
+    });
 
-    const recentActivity = recentJobs.map(job => {
-      let description = ''
-      let type = 'update'
+    const recentActivity = recentJobs.map((job) => {
+      let description = "";
+      let type = "update";
 
       switch (job.type) {
-        case 'SCRAPE':
-          description = `Indexed ${job.source.domain}`
-          type = 'add'
-          break
-        case 'UPDATE':
-          description = `Updated ${job.source.domain}`
-          type = 'update'
-          break
-        case 'EMBED':
-          description = `Generated embeddings for ${job.source.domain}`
-          type = 'update'
-          break
+        case "SCRAPE":
+          description = `Indexed ${job.source.domain}`;
+          type = "add";
+          break;
+        case "UPDATE":
+          description = `Updated ${job.source.domain}`;
+          type = "update";
+          break;
+        case "EMBED":
+          description = `Generated embeddings for ${job.source.domain}`;
+          type = "update";
+          break;
       }
 
       return {
         id: job.id,
         type,
         description,
-        result: job.status === 'COMPLETED' ? 'Success' : job.status.toLowerCase(),
-        timestamp: job.completedAt?.toISOString() || job.createdAt.toISOString(),
-      }
-    })
+        result:
+          job.status === "COMPLETED" ? "Success" : job.status.toLowerCase(),
+        timestamp:
+          job.completedAt?.toISOString() || job.createdAt.toISOString(),
+      };
+    });
 
     return NextResponse.json({
       stats: {
@@ -178,13 +184,12 @@ export async function GET(request: NextRequest) {
       },
       recentSources,
       recentActivity,
-    })
-
+    });
   } catch (error: any) {
-    console.error('[API] GET /api/dashboard/stats error:', error)
+    console.error("[API] GET /api/dashboard/stats error:", error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }

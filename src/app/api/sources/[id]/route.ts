@@ -5,13 +5,14 @@
  * DELETE /api/sources/[id] - Delete source
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getApiSession } from '@/lib/auth/api'
-import { prisma } from '@/lib/db'
-import { calculateNextScrapeAt } from '@/lib/jobs/scheduler'
-import { z } from 'zod'
+import { getApiSession } from "@/lib/auth/api";
+import { prisma } from "@/lib/db";
+import { calculateNextScrapeAt } from "@/lib/jobs/scheduler";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const UpdateSourceSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -21,8 +22,8 @@ const UpdateSourceSchema = z.object({
       respectRobotsTxt: z.boolean().optional(),
     })
     .optional(),
-  rescrapeSchedule: z.enum(['NEVER', 'DAILY', 'WEEKLY', 'MONTHLY']).optional(),
-})
+  rescrapeSchedule: z.enum(["NEVER", "DAILY", "WEEKLY", "MONTHLY"]).optional(),
+});
 
 /**
  * GET /api/sources/[id]
@@ -33,12 +34,12 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = params
+    const { id } = params;
 
     // Get source with related data
     const source = await prisma.source.findUnique({
@@ -51,9 +52,9 @@ export async function GET(
         },
         jobs: {
           where: {
-            type: 'SCRAPE',
+            type: "SCRAPE",
           },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
           take: 5,
           select: {
             id: true,
@@ -67,7 +68,7 @@ export async function GET(
         },
         pages: {
           take: 10,
-          orderBy: { indexedAt: 'desc' },
+          orderBy: { indexedAt: "desc" },
           select: {
             id: true,
             url: true,
@@ -76,10 +77,10 @@ export async function GET(
           },
         },
       },
-    })
+    });
 
     if (!source) {
-      return NextResponse.json({ error: 'Source not found' }, { status: 404 })
+      return NextResponse.json({ error: "Source not found" }, { status: 404 });
     }
 
     // Check access: user must own the workspace or source must be global
@@ -92,13 +93,13 @@ export async function GET(
             ownerId: session.user.id,
           },
         },
-      })
+      });
 
       if (!workspace) {
         return NextResponse.json(
-          { error: 'You do not have permission to access this source' },
+          { error: "You do not have permission to access this source" },
           { status: 403 }
-        )
+        );
       }
     }
 
@@ -106,7 +107,7 @@ export async function GET(
     const formattedSource = {
       ...source,
       pageCount: source._count.pages,
-      scrapeJobs: source.jobs.map(job => ({
+      scrapeJobs: source.jobs.map((job) => ({
         id: job.id,
         status: job.status,
         startedAt: job.startedAt || job.createdAt,
@@ -114,7 +115,7 @@ export async function GET(
         pagesScraped: (job.progress as any)?.completed || 0,
         errorMessage: job.errorMessage,
       })),
-      pages: source.pages.map(page => ({
+      pages: source.pages.map((page) => ({
         id: page.id,
         url: page.url,
         title: page.title,
@@ -122,15 +123,15 @@ export async function GET(
       })),
       jobs: undefined, // Remove the jobs field
       config: source.config || undefined,
-    }
+    };
 
-    return NextResponse.json({ source: formattedSource })
+    return NextResponse.json({ source: formattedSource });
   } catch (error: any) {
-    console.error(`[API] GET /api/sources/${params.id} error:`, error)
+    console.error(`[API] GET /api/sources/${params.id} error:`, error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }
 
@@ -143,22 +144,22 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = params
-    const body = await request.json()
-    const data = UpdateSourceSchema.parse(body)
+    const { id } = params;
+    const body = await request.json();
+    const data = UpdateSourceSchema.parse(body);
 
     // Get user role
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { role: true },
-    })
+    });
 
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
+    const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
 
     // Find source and check ownership
     const existingSource = await prisma.source.findUnique({
@@ -174,26 +175,29 @@ export async function PUT(
           take: 1,
         },
       },
-    })
+    });
 
     if (!existingSource) {
-      return NextResponse.json({ error: 'Source not found' }, { status: 404 })
+      return NextResponse.json({ error: "Source not found" }, { status: 404 });
     }
 
     // Global sources can only be edited by admins
     if (existingSource.scope === "GLOBAL" && !isAdmin) {
       return NextResponse.json(
-        { error: 'Cannot edit global sources. Admin access required.' },
+        { error: "Cannot edit global sources. Admin access required." },
         { status: 403 }
-      )
+      );
     }
 
     // For workspace sources, check workspace ownership
-    if (existingSource.scope === "WORKSPACE" && existingSource.workspaceSources.length === 0) {
+    if (
+      existingSource.scope === "WORKSPACE" &&
+      existingSource.workspaceSources.length === 0
+    ) {
       return NextResponse.json(
-        { error: 'You do not have permission to edit this source' },
+        { error: "You do not have permission to edit this source" },
         { status: 403 }
-      )
+      );
     }
 
     // Calculate nextScrapeAt if schedule is being updated
@@ -202,7 +206,7 @@ export async function PUT(
           rescrapeSchedule: data.rescrapeSchedule,
           nextScrapeAt: calculateNextScrapeAt(data.rescrapeSchedule),
         }
-      : {}
+      : {};
 
     // Update source
     const updatedSource = await prisma.source.update({
@@ -219,7 +223,7 @@ export async function PUT(
           },
         },
       },
-    })
+    });
 
     return NextResponse.json({
       source: {
@@ -227,21 +231,21 @@ export async function PUT(
         pageCount: updatedSource._count.pages,
         config: updatedSource.config || undefined,
       },
-    })
+    });
   } catch (error: any) {
-    console.error(`[API] PUT /api/sources/${params.id} error:`, error)
+    console.error(`[API] PUT /api/sources/${params.id} error:`, error);
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: "Validation error", details: error.errors },
         { status: 400 }
-      )
+      );
     }
 
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }
 
@@ -254,12 +258,12 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = params
+    const { id } = params;
 
     // Find source and check ownership
     const source = await prisma.source.findUnique({
@@ -275,39 +279,39 @@ export async function DELETE(
           take: 1,
         },
       },
-    })
+    });
 
     if (!source) {
-      return NextResponse.json({ error: 'Source not found' }, { status: 404 })
+      return NextResponse.json({ error: "Source not found" }, { status: 404 });
     }
 
     // Global sources can't be deleted by regular users
     if (source.scope === "GLOBAL") {
       return NextResponse.json(
-        { error: 'Cannot delete global sources' },
+        { error: "Cannot delete global sources" },
         { status: 403 }
-      )
+      );
     }
 
     // Check workspace ownership
     if (source.workspaceSources.length === 0) {
       return NextResponse.json(
-        { error: 'You do not have permission to delete this source' },
+        { error: "You do not have permission to delete this source" },
         { status: 403 }
-      )
+      );
     }
 
     // Delete source (cascade will handle pages and scrape jobs)
     await prisma.source.delete({
       where: { id },
-    })
+    });
 
-    return NextResponse.json({ message: 'Source deleted successfully' })
+    return NextResponse.json({ message: "Source deleted successfully" });
   } catch (error: any) {
-    console.error(`[API] DELETE /api/sources/${params.id} error:`, error)
+    console.error(`[API] DELETE /api/sources/${params.id} error:`, error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }

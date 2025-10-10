@@ -3,11 +3,12 @@
  * GET /api/sources/[id]/jobs - Get current job status with progress
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getApiSession } from '@/lib/auth/api'
-import { prisma } from '@/lib/db'
+import { getApiSession } from "@/lib/auth/api";
+import { prisma } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/sources/[id]/jobs
@@ -18,12 +19,12 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getApiSession()
+    const session = await getApiSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = params
+    const { id } = params;
 
     // Find source and check access
     const source = await prisma.source.findUnique({
@@ -40,27 +41,27 @@ export async function GET(
           take: 1,
         },
       },
-    })
+    });
 
     if (!source) {
-      return NextResponse.json({ error: 'Source not found' }, { status: 404 })
+      return NextResponse.json({ error: "Source not found" }, { status: 404 });
     }
 
     // Check access: user must own the workspace or source must be global
-    if (source.scope !== 'GLOBAL' && source.workspaceSources.length === 0) {
+    if (source.scope !== "GLOBAL" && source.workspaceSources.length === 0) {
       return NextResponse.json(
-        { error: 'You do not have permission to access this source' },
+        { error: "You do not have permission to access this source" },
         { status: 403 }
-      )
+      );
     }
 
     // Get the current running, pending, or most recent completed job
     const job = await prisma.job.findFirst({
       where: {
         sourceId: id,
-        status: { in: ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'] },
+        status: { in: ["PENDING", "RUNNING", "COMPLETED", "FAILED"] },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       select: {
         id: true,
         type: true,
@@ -70,14 +71,14 @@ export async function GET(
         completedAt: true,
         createdAt: true,
       },
-    })
+    });
 
     if (!job) {
-      return NextResponse.json({ job: null })
+      return NextResponse.json({ job: null });
     }
 
     // Format progress data
-    const progress = job.progress as any
+    const progress = job.progress as any;
 
     return NextResponse.json({
       job: {
@@ -98,12 +99,12 @@ export async function GET(
           total: progress?.total || 0,
         },
       },
-    })
+    });
   } catch (error: any) {
-    console.error(`[API] GET /api/sources/${params.id}/jobs error:`, error)
+    console.error(`[API] GET /api/sources/${params.id}/jobs error:`, error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: "Internal server error", details: error.message },
       { status: 500 }
-    )
+    );
   }
 }
