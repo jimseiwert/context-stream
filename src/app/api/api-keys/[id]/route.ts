@@ -1,0 +1,54 @@
+/**
+ * API Key Management - Single Key Operations
+ * DELETE /api/api-keys/[id] - Delete an API key
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { getApiSession } from '@/lib/auth/api'
+import { prisma } from '@/lib/db'
+
+export const runtime = 'nodejs'
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getApiSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = params
+
+    // Find the API key and verify ownership
+    const apiKey = await prisma.apiKey.findUnique({
+      where: { id },
+      select: { userId: true },
+    })
+
+    if (!apiKey) {
+      return NextResponse.json({ error: 'API key not found' }, { status: 404 })
+    }
+
+    if (apiKey.userId !== session.user.id) {
+      return NextResponse.json(
+        { error: 'You do not have permission to delete this API key' },
+        { status: 403 }
+      )
+    }
+
+    // Delete the API key
+    await prisma.apiKey.delete({
+      where: { id },
+    })
+
+    return NextResponse.json({ message: 'API key deleted successfully' })
+  } catch (error: any) {
+    console.error(`[API] DELETE /api/api-keys/${params.id} error:`, error)
+    return NextResponse.json(
+      { error: 'Internal server error', details: error.message },
+      { status: 500 }
+    )
+  }
+}

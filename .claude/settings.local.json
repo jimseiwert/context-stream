@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(tree:*)",
+      "Bash(npx create-next-app:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(xargs ls:*)",
+      "WebFetch(domain:context7.com)",
+      "WebSearch",
+      "WebFetch(domain:www.better-auth.com)",
+      "Bash(./fix-runtime.sh)",
+      "Bash(find:*)",
+      "Bash(xargs:*)",
+      "WebFetch(domain:simplescraper.io)",
+      "mcp__ref__ref_search_documentation",
+      "mcp__ref__ref_read_url",
+      "mcp__contextstream__search",
+      "mcp__contextstream__contextstream_search",
+      "Bash(npx prisma:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,161 @@
+// Rate Limiting with Upstash Redis
+// Implements sliding window rate limiting per user
+
+import { Redis } from '@upstash/redis'
+import { IS_SAAS_MODE } from './config/features'
+
+// Initialize Upstash Redis client
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+})
+
+export interface RateLimitResult {
+  success: boolean
+  limit: number
+  remaining: number
+  reset: number // Unix timestamp
+}
+
+export interface RateLimitOptions {
+  userId: string
+  limit: number // requests per window
+  window: number // window size in seconds (default: 60 for 1 minute)
+}
+
+/**
+ * Check rate limit using sliding window algorithm
+ */
+export async function checkRateLimit(
+  options: RateLimitOptions
+): Promise<RateLimitResult> {
+  // Skip rate limiting in self-hosted mode
+  if (!IS_SAAS_MODE) {
+    return {
+      success: true,
+      limit: -1,
+      remaining: -1,
+      reset: 0,
+    }
+  }
+
+  const { userId, limit, window = 60 } = options
+
+  const key = `ratelimit:${userId}`
+  const now = Date.now()
+  const windowStart = now - window * 1000
+
+  try {
+    // Using Redis sorted set with timestamps as scores
+    const pipeline = redis.pipeline()
+
+    // Remove old entries outside the window
+    pipeline.zremrangebyscore(key, 0, windowStart)
+
+    // Count current requests in window
+    pipeline.zcard(key)
+
+    // Add current request
+    pipeline.zadd(key, { score: now, member: `${now}-${Math.random()}` })
+
+    // Set expiry
+    pipeline.expire(key, window * 2)
+
+    const results = await pipeline.exec()
+    const currentCount = (results[1] as number) || 0
+
+    // Check if limit exceeded
+    const success = currentCount < limit
+    const remaining = Math.max(0, limit - currentCount - 1)
+    const reset = Math.ceil((now + window * 1000) / 1000)
+
+    return {
+      success,
+      limit,
+      remaining,
+      reset,
+    }
+  } catch (error) {
+    console.error('Rate limit check failed:', error)
+    // Fail open - allow request if rate limit check fails
+    return {
+      success: true,
+      limit,
+      remaining: limit,
+      reset: Math.ceil((now + window * 1000) / 1000),
+    }
+  }
+}
+
+/**
+ * Get current rate limit status without consuming a token
+ */
+export async function getRateLimitStatus(
+  userId: string,
+  window = 60
+): Promise<{ count: number; oldestRequest: number }> {
+  if (!IS_SAAS_MODE) {
+    return { count: 0, oldestRequest: 0 }
+  }
+
+  const key = `ratelimit:${userId}`
+  const now = Date.now()
+  const windowStart = now - window * 1000
+
+  try {
+    // Clean up old entries
+    await redis.zremrangebyscore(key, 0, windowStart)
+
+    // Get count
+    const count = await redis.zcard(key)
+
+    // Get oldest request in window
+    const oldest = await redis.zrange(key, 0, 0, { withScores: true })
+    const oldestRequest = oldest.length > 0 ? (oldest[0].score as number) : 0
+
+    return { count, oldestRequest }
+  } catch (error) {
+    console.error('Failed to get rate limit status:', error)
+    return { count: 0, oldestRequest: 0 }
+  }
+}
+
+/**
+ * Reset rate limit for a user (admin function)
+ */
+export async function resetRateLimit(userId: string): Promise<void> {
+  if (!IS_SAAS_MODE) return
+
+  const key = `ratelimit:${userId}`
+  try {
+    await redis.del(key)
+  } catch (error) {
+    console.error('Failed to reset rate limit:', error)
+  }
+}
+
+/**
+ * Format rate limit headers for HTTP responses
+ */
+export function formatRateLimitHeaders(result: RateLimitResult): Record<string, string> {
+  return {
+    'X-RateLimit-Limit': result.limit.toString(),
+    'X-RateLimit-Remaining': result.remaining.toString(),
+    'X-RateLimit-Reset': result.reset.toString(),
+  }
+}
+
+/**
+ * Create rate limit error response
+ */
+export function createRateLimitError(result: RateLimitResult) {
+  const resetDate = new Date(result.reset * 1000)
+  return {
+    error: 'Rate limit exceeded',
+    message: `Too many requests. Please try again after ${resetDate.toISOString()}`,
+    limit: result.limit,
+    remaining: result.remaining,
+    reset: result.reset,
+    resetDate: resetDate.toISOString(),
+  }
+}
