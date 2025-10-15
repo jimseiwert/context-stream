@@ -94,16 +94,20 @@ COPY <<EOF /etc/supervisor/conf.d/supervisord.conf
 [supervisord]
 nodaemon=true
 user=root
-logfile=/var/log/supervisor/supervisord.log
+logfile=/dev/stdout
+logfile_maxbytes=0
 pidfile=/var/run/supervisord.pid
+loglevel=info
 
 [program:postgresql]
 command=/usr/lib/postgresql/14/bin/postgres -D /var/lib/postgresql/14/main -c config_file=/etc/postgresql/14/main/postgresql.conf
 user=postgres
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/supervisor/postgresql.err.log
-stdout_logfile=/var/log/supervisor/postgresql.out.log
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
 priority=1
 
 [program:redis]
@@ -111,8 +115,10 @@ command=/usr/bin/redis-server --appendonly yes --dir /var/lib/redis
 user=redis
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/supervisor/redis.err.log
-stdout_logfile=/var/log/supervisor/redis.out.log
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
 priority=2
 
 [program:migrations]
@@ -120,16 +126,20 @@ command=/app/scripts/bundle-migrate.sh
 autostart=true
 autorestart=false
 startsecs=0
-stderr_logfile=/var/log/supervisor/migrations.err.log
-stdout_logfile=/var/log/supervisor/migrations.out.log
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
 priority=3
 
 [program:nextjs]
 command=/bin/bash -c "sleep 10 && cd /app && node server.js"
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/supervisor/nextjs.err.log
-stdout_logfile=/var/log/supervisor/nextjs.out.log
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
 environment=NODE_ENV="production",PORT="3000",DATABASE_URL="postgresql://contextstream:changeme@localhost:5432/contextstream",REDIS_URL="redis://localhost:6379"
 priority=4
 
@@ -137,8 +147,10 @@ priority=4
 command=/bin/bash -c "sleep 15 && cd /app && npm run worker"
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/supervisor/worker.err.log
-stdout_logfile=/var/log/supervisor/worker.out.log
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
 environment=NODE_ENV="production",DATABASE_URL="postgresql://contextstream:changeme@localhost:5432/contextstream",REDIS_URL="redis://localhost:6379",NODE_OPTIONS="--max-old-space-size=2048"
 priority=5
 EOF

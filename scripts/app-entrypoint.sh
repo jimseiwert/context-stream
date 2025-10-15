@@ -66,4 +66,5 @@ export DATABASE_URL="$APP_URL"
 
 # Start the app
 echo "✅ Starting Next.js server..."
-exec node server.js
+# Use stdbuf to force line-buffered output for Kubernetes logging
+exec stdbuf -oL -eL node server.js

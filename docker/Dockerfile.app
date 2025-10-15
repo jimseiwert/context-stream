@@ -79,7 +79,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apk add --no-cache openssl libc6-compat curl
+RUN apk add --no-cache openssl libc6-compat curl coreutils
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
@@ -107,6 +107,11 @@ EXPOSE 3000
 ENV PORT=3000
 ENV NODE_ENV=production
 ENV HOSTNAME="0.0.0.0"
+
+# Force unbuffered output for Kubernetes logging
+ENV FORCE_COLOR=1 \
+    NPM_CONFIG_LOGLEVEL=info \
+    PYTHONUNBUFFERED=1
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
