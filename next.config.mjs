@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    nodeMiddleware: true, // Enable Node.js middleware
-  },
+  //experimental: {
+  //  nodeMiddleware: true, // Enable Node.js middleware
+  //},
   reactStrictMode: true,
   output: "standalone",
   images: {

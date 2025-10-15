@@ -264,11 +264,24 @@ async function processPendingSources() {
 
     console.log(`Found ${pendingSources.length} pending source(s) in database:\n`);
 
-    // Add each pending source to the queue
+    // Add each pending source to the queue (but skip if already has an active job)
     for (const source of pendingSources) {
-      console.log(`  Adding to queue: ${source.name || source.url}`);
+      console.log(`  Checking: ${source.name || source.url}`);
       console.log(`    Source ID: ${source.id}`);
       console.log(`    Created: ${source.createdAt.toISOString()}`);
+
+      // Check if there's already an active job for this source
+      const existingJob = await prisma.job.findFirst({
+        where: {
+          sourceId: source.id,
+          status: { in: ['PENDING', 'RUNNING'] }
+        }
+      });
+
+      if (existingJob) {
+        console.log(`    ⊘ Skipping - already has active job (${existingJob.status})\n`);
+        continue;
+      }
 
       try {
         await addScrapeJob(source.id, { priority: 2 }); // Higher priority for pending sources

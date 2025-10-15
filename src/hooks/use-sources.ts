@@ -9,7 +9,7 @@ export interface Source {
   url: string;
   domain: string;
   logo?: string | null;
-  type: "WEBSITE" | "GITHUB" | "CONFLUENCE" | "CUSTOM";
+  type: "WEBSITE" | "GITHUB";
   scope: "GLOBAL" | "WORKSPACE";
   status: "PENDING" | "INDEXING" | "ACTIVE" | "ERROR" | "PAUSED";
   config?: {
@@ -66,7 +66,7 @@ export interface Source {
 
 export interface CreateSourceInput {
   url: string;
-  type: "WEBSITE" | "GITHUB" | "CONFLUENCE" | "CUSTOM";
+  type: "WEBSITE" | "GITHUB";
   scope?: "GLOBAL" | "WORKSPACE"; // Optional - defaults to WORKSPACE
   workspaceId?: string; // Optional - API will use user's workspace if not provided
   config?: {
@@ -322,6 +322,33 @@ export function useAdminDeleteSource() {
     onError: (error: any) => {
       const message =
         error.data?.error || error.message || "Failed to delete source";
+      toast.error(message);
+    },
+  });
+}
+
+// Cancel running job
+export function useCancelJob() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (sourceId: string) => {
+      const response = await apiClient.delete<{
+        success: boolean;
+        message: string;
+      }>(`/api/sources/${sourceId}/jobs`);
+      return response;
+    },
+    onSuccess: (data, sourceId) => {
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+      queryClient.invalidateQueries({ queryKey: ["sources", sourceId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-sources"] });
+      queryClient.invalidateQueries({ queryKey: ["job-status", sourceId] });
+      toast.success(data.message || "Job cancelled successfully");
+    },
+    onError: (error: any) => {
+      const message =
+        error.data?.error || error.message || "Failed to cancel job";
       toast.error(message);
     },
   });

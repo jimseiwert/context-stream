@@ -52,6 +52,9 @@ export interface PipelineProgress {
   completed: number;
   failed: number;
   total: number;
+  // Optional metadata updates (only included when they change)
+  name?: string;
+  logo?: string;
 }
 
 export interface PipelineConfig {
@@ -67,6 +70,7 @@ export interface PipelineConfig {
   embeddingConcurrency?: number;
   saveConcurrency?: number;
   onProgress?: (progress: PipelineProgress) => void;
+  checkCancellation?: () => Promise<boolean>; // Check if job has been cancelled
 }
 
 export class PipelineProcessor {
@@ -84,14 +88,26 @@ export class PipelineProcessor {
   private saveQueue: PageTask[] = [];
 
   private isProcessing = false;
+  private isCancelled = false;
   private config: PipelineConfig;
-  private logoExtracted = false; // Track if we've extracted the favicon
-  private nameExtracted = false; // Track if we've extracted the source name
+
+  // Track best name score and whether we've found a logo
+  // Always check first few pages to potentially find better metadata
+  private bestNameScore = 0;
+  private hasLogo = false;
+  private pagesCheckedForMetadata = 0;
+  private readonly MAX_PAGES_TO_CHECK_FOR_METADATA = 3;
+
+  // Progress counters (independent of task map for accurate progress after cleanup)
+  private totalTasksDiscovered = 0;
+  private totalCompleted = 0;
+  private totalFailed = 0;
 
   // Track failures by stage for detailed reporting
   private failuresByStage = {
     fetch: [] as Array<{ url: string; error: string }>,
     extract: [] as Array<{ url: string; error: string }>,
+    insufficientContent: [] as Array<{ url: string; error: string }>,
     embed: [] as Array<{ url: string; error: string }>,
     save: [] as Array<{ url: string; error: string }>,
   };
@@ -116,6 +132,17 @@ export class PipelineProcessor {
    */
   async process(): Promise<{ completed: number; failed: number }> {
     console.log(`[Pipeline] Starting for ${this.config.startUrl}`);
+
+    // Check current metadata state - we'll always check first few pages to potentially find better metadata
+    const currentSource = await prisma.source.findUnique({
+      where: { id: this.config.sourceId },
+      select: { name: true, logo: true },
+    });
+
+    this.hasLogo = !!currentSource?.logo;
+
+    console.log(`[Pipeline] Current metadata: name="${currentSource?.name || 'none'}", logo=${this.hasLogo ? 'yes' : 'no'}`);
+    console.log(`[Pipeline] Will check first ${this.MAX_PAGES_TO_CHECK_FOR_METADATA} pages for better metadata`);
 
     // Load robots.txt
     if (this.config.respectRobotsTxt) {
@@ -184,20 +211,26 @@ export class PipelineProcessor {
     // Try sitemap if llms.txt not found or incomplete
     if (!usedEfficientMethod) {
       console.log(`[Pipeline] Checking for sitemap.xml...`);
-      const sitemapResult = await this.sitemapParser.parse(baseUrl);
+      const sitemapResult = await this.sitemapParser.parse(baseUrl, this.config.maxPages);
 
       if (sitemapResult.found && sitemapResult.urls.length > 0) {
         console.log(
           `[Pipeline] Found sitemap with ${sitemapResult.urls.length} URLs`
         );
 
-        // Add all URLs from sitemap
+        // Process sitemap URLs in the order they're returned
+        // Sitemaps typically have important pages (homepage, main sections) first
         for (const url of sitemapResult.urls) {
-          this.addTask({
-            url,
-            depth: 0,
-            stage: "QUEUED",
-          });
+          // Skip sitemaps, feeds, and other non-content files
+          if (!this.isNonContentFile(url)) {
+            this.addTask({
+              url,
+              depth: 0,
+              stage: "QUEUED",
+            });
+          } else {
+            console.log(`[Pipeline] Skipping non-content URL from sitemap: ${url}`);
+          }
         }
         usedEfficientMethod = true;
       }
@@ -246,6 +279,7 @@ export class PipelineProcessor {
     const totalFailures =
       this.failuresByStage.fetch.length +
       this.failuresByStage.extract.length +
+      this.failuresByStage.insufficientContent.length +
       this.failuresByStage.embed.length +
       this.failuresByStage.save.length;
 
@@ -289,6 +323,7 @@ export class PipelineProcessor {
 
     printStageFailures('fetch', this.failuresByStage.fetch);
     printStageFailures('extract', this.failuresByStage.extract);
+    printStageFailures('insufficient content', this.failuresByStage.insufficientContent);
     printStageFailures('embed', this.failuresByStage.embed);
     printStageFailures('save', this.failuresByStage.save);
 
@@ -299,6 +334,14 @@ export class PipelineProcessor {
    * Add a task to the pipeline
    */
   private addTask(task: PageTask) {
+    // Normalize URL to prevent duplicates
+    // Remove trailing slash, hash, and query params
+    const normalizedUrl = this.normalizeUrl(task.url);
+    if (!normalizedUrl) {
+      return; // Invalid URL
+    }
+    task.url = normalizedUrl;
+
     // Skip if already visited or at max pages
     if (this.visited.has(task.url) || this.tasks.size >= this.config.maxPages) {
       return;
@@ -334,6 +377,11 @@ export class PipelineProcessor {
     this.visited.add(task.url);
     this.tasks.set(task.url, task);
     this.fetchQueue.push(task);
+
+    // Count all tasks (both initial seeds and discovered links) in total
+    // This ensures queue count never exceeds total count
+    this.totalTasksDiscovered++;
+
     this.reportProgress();
   }
 
@@ -342,6 +390,14 @@ export class PipelineProcessor {
    * Skips the FETCH stage and goes directly to EXTRACT
    */
   private addTaskWithContent(task: PageTask) {
+    // Normalize URL to prevent duplicates
+    // Remove trailing slash, hash, and query params
+    const normalizedUrl = this.normalizeUrl(task.url);
+    if (!normalizedUrl) {
+      return; // Invalid URL
+    }
+    task.url = normalizedUrl;
+
     // Skip if already visited or at max pages
     if (this.visited.has(task.url) || this.tasks.size >= this.config.maxPages) {
       return;
@@ -356,6 +412,11 @@ export class PipelineProcessor {
     this.visited.add(task.url);
     this.tasks.set(task.url, task);
     this.extractQueue.push(task);
+
+    // Count all tasks (both initial seeds and discovered links) in total
+    // This ensures queue count never exceeds total count
+    this.totalTasksDiscovered++;
+
     this.reportProgress();
   }
 
@@ -371,7 +432,17 @@ export class PipelineProcessor {
   }
 
   private async fetchWorker() {
-    while (this.isProcessing) {
+    while (this.isProcessing && !this.isCancelled) {
+      // Check for cancellation every iteration
+      if (this.config.checkCancellation) {
+        const cancelled = await this.config.checkCancellation();
+        if (cancelled) {
+          console.log('[Pipeline] Cancellation detected, stopping fetch worker');
+          this.isCancelled = true;
+          break;
+        }
+      }
+
       const task = this.fetchQueue.shift();
       if (!task) {
         await this.sleep(100);
@@ -384,6 +455,7 @@ export class PipelineProcessor {
         if (this.isNonContentFile(task.url)) {
           console.log(`[Pipeline] Skipping non-content file: ${task.url}`);
           task.stage = "COMPLETED";
+          this.totalCompleted++;
           this.reportProgress();
           continue;
         }
@@ -395,7 +467,17 @@ export class PipelineProcessor {
         const response = await fetch(task.url, {
           headers: {
             "User-Agent":
-              "ContextStream/1.0 (Documentation Indexer; +https://contextstream.ai)",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Cache-Control": "max-age=0",
           },
         });
 
@@ -431,6 +513,7 @@ export class PipelineProcessor {
         );
         task.stage = "FAILED";
         task.error = `[FETCH] ${error.message}`;
+        this.totalFailed++;
         this.failuresByStage.fetch.push({ url: task.url, error: error.message });
         this.reportProgress();
       }
@@ -449,7 +532,17 @@ export class PipelineProcessor {
   }
 
   private async extractWorker() {
-    while (this.isProcessing) {
+    while (this.isProcessing && !this.isCancelled) {
+      // Check for cancellation every iteration
+      if (this.config.checkCancellation) {
+        const cancelled = await this.config.checkCancellation();
+        if (cancelled) {
+          console.log('[Pipeline] Cancellation detected, stopping extract worker');
+          this.isCancelled = true;
+          break;
+        }
+      }
+
       const task = this.extractQueue.shift();
       if (!task || !task.html) {
         await this.sleep(100);
@@ -473,65 +566,73 @@ export class PipelineProcessor {
           html,
           task.url
         );
+
+        // Validate minimum content length
+        const MIN_CONTENT_LENGTH = 100;
+        if (!content.text || content.text.trim().length < MIN_CONTENT_LENGTH) {
+          throw new Error(
+            `Insufficient content (${content.text?.trim().length || 0} characters, minimum ${MIN_CONTENT_LENGTH})`
+          );
+        }
+
         task.content = content;
 
-        // Extract favicon from the first successfully processed page (only if missing)
-        if (!this.logoExtracted) {
-          this.logoExtracted = true; // Mark as attempted
+        // Check first few pages for metadata (name/logo) to find best values
+        if (this.pagesCheckedForMetadata < this.MAX_PAGES_TO_CHECK_FOR_METADATA) {
+          this.pagesCheckedForMetadata++;
 
+          // Extract site name and update if better than current
           try {
-            // Check if source already has a logo
-            const currentSource = await prisma.source.findUnique({
-              where: { id: this.config.sourceId },
-              select: { logo: true },
-            });
+            const siteNameResult = this.contentExtractor.extractSiteName(html);
 
-            if (!currentSource?.logo) {
+            if (siteNameResult.name && siteNameResult.score > this.bestNameScore) {
+              console.log(`[Pipeline] Found better site name: "${siteNameResult.name}" (score: ${siteNameResult.score}, previous: ${this.bestNameScore}) from ${task.url}`);
+
+              // Update the database with the better name
+              await prisma.source.update({
+                where: { id: this.config.sourceId },
+                data: { name: siteNameResult.name },
+              });
+
+              this.bestNameScore = siteNameResult.score;
+              console.log(`[Pipeline] Updated source name to: ${siteNameResult.name}`);
+
+              // Report progress with updated name
+              this.reportProgressWithMetadata({ name: siteNameResult.name });
+            }
+          } catch (nameError: any) {
+            console.error(`[Pipeline] Site name extraction failed for ${task.url}:`, nameError.message);
+            // Don't fail the entire task if name extraction fails
+          }
+
+          // Extract favicon if we don't have one yet
+          if (!this.hasLogo) {
+            try {
               console.log(`[Pipeline] Extracting favicon from ${task.url}`);
               const faviconUrl = await extractAndVerifyFavicon(html, task.url);
+
               if (faviconUrl) {
                 // Update source with favicon URL
                 await prisma.source.update({
                   where: { id: this.config.sourceId },
                   data: { logo: faviconUrl },
                 });
+
+                this.hasLogo = true;
                 console.log(`[Pipeline] Saved favicon: ${faviconUrl}`);
-              } else {
-                console.log(`[Pipeline] No valid favicon found on ${task.url}`);
+
+                // Report progress with updated logo
+                this.reportProgressWithMetadata({ logo: faviconUrl });
               }
-            } else {
-              console.log(`[Pipeline] Logo already exists, skipping extraction`);
+            } catch (faviconError: any) {
+              console.error(`[Pipeline] Favicon extraction failed for ${task.url}:`, faviconError.message);
+              // Don't fail the entire task if favicon extraction fails
             }
-          } catch (faviconError: any) {
-            console.error(`[Pipeline] Favicon extraction failed:`, faviconError.message);
-            // Don't fail the entire task if favicon extraction fails
           }
-        }
 
-        // Extract source name from the first successfully processed page (only if missing)
-        if (!this.nameExtracted && task.content?.title) {
-          this.nameExtracted = true; // Mark as attempted
-
-          try {
-            // Check if source already has a name
-            const currentSource = await prisma.source.findUnique({
-              where: { id: this.config.sourceId },
-              select: { name: true },
-            });
-
-            if (!currentSource?.name) {
-              console.log(`[Pipeline] Setting source name from first page: ${task.content.title}`);
-              await prisma.source.update({
-                where: { id: this.config.sourceId },
-                data: { name: task.content.title },
-              });
-              console.log(`[Pipeline] Source name updated: ${task.content.title}`);
-            } else {
-              console.log(`[Pipeline] Name already exists, skipping extraction`);
-            }
-          } catch (nameError: any) {
-            console.error(`[Pipeline] Source name extraction failed:`, nameError.message);
-            // Don't fail the entire task if name extraction fails
+          // Log when we've checked enough pages
+          if (this.pagesCheckedForMetadata >= this.MAX_PAGES_TO_CHECK_FOR_METADATA) {
+            console.log(`[Pipeline] ✓ Checked ${this.MAX_PAGES_TO_CHECK_FOR_METADATA} pages for metadata (best name score: ${this.bestNameScore}, logo: ${this.hasLogo ? 'yes' : 'no'})`);
           }
         }
 
@@ -561,7 +662,15 @@ export class PipelineProcessor {
         );
         task.stage = "FAILED";
         task.error = `[EXTRACT] ${error.message}`;
-        this.failuresByStage.extract.push({ url: task.url, error: error.message });
+        this.totalFailed++;
+
+        // Categorize insufficient content failures separately
+        if (error.message.includes('Insufficient content')) {
+          this.failuresByStage.insufficientContent.push({ url: task.url, error: error.message });
+        } else {
+          this.failuresByStage.extract.push({ url: task.url, error: error.message });
+        }
+
         this.reportProgress();
       }
     }
@@ -579,7 +688,17 @@ export class PipelineProcessor {
   }
 
   private async embedWorker() {
-    while (this.isProcessing) {
+    while (this.isProcessing && !this.isCancelled) {
+      // Check for cancellation every iteration
+      if (this.config.checkCancellation) {
+        const cancelled = await this.config.checkCancellation();
+        if (cancelled) {
+          console.log('[Pipeline] Cancellation detected, stopping embed worker');
+          this.isCancelled = true;
+          break;
+        }
+      }
+
       const task = this.embedQueue.shift();
       if (!task || !task.content) {
         await this.sleep(100);
@@ -624,6 +743,7 @@ export class PipelineProcessor {
         );
         task.stage = "FAILED";
         task.error = `[EMBED] ${error.message}`;
+        this.totalFailed++;
         this.failuresByStage.embed.push({ url: task.url, error: error.message });
         this.reportProgress();
       }
@@ -642,7 +762,17 @@ export class PipelineProcessor {
   }
 
   private async saveWorker() {
-    while (this.isProcessing) {
+    while (this.isProcessing && !this.isCancelled) {
+      // Check for cancellation every iteration
+      if (this.config.checkCancellation) {
+        const cancelled = await this.config.checkCancellation();
+        if (cancelled) {
+          console.log('[Pipeline] Cancellation detected, stopping save worker');
+          this.isCancelled = true;
+          break;
+        }
+      }
+
       const task = this.saveQueue.shift();
       if (!task || !task.content) {
         await this.sleep(100);
@@ -678,6 +808,7 @@ export class PipelineProcessor {
         }
 
         task.stage = "COMPLETED";
+        this.totalCompleted++;
 
         // MEMORY FIX: Clear task data after completion to free memory
         task.content = undefined;
@@ -754,10 +885,10 @@ export class PipelineProcessor {
         // Resolve relative URLs
         const absolute = new URL(href, baseUrl).href;
 
-        // Remove hash and query params
-        const clean = absolute.split("#")[0].split("?")[0];
-        if (clean) {
-          links.add(clean);
+        // Normalize URL (same logic as addTask)
+        const normalized = this.normalizeUrl(absolute);
+        if (normalized) {
+          links.add(normalized);
         }
       } catch {
         // Invalid URL, skip
@@ -777,15 +908,14 @@ export class PipelineProcessor {
       extracting: this.extractQueue.length,
       embedding: this.embedQueue.length,
       saving: this.saveQueue.length,
-      completed: 0,
-      failed: 0,
-      total: this.tasks.size,
+      completed: this.totalCompleted,  // Use persistent counter
+      failed: this.totalFailed,  // Use persistent counter
+      total: this.totalTasksDiscovered,  // Use persistent counter
     };
 
+    // Still need to count FETCHING tasks from the map since they're actively being processed
     for (const task of Array.from(this.tasks.values())) {
       if (task.stage === "FETCHING") progress.fetching++;
-      else if (task.stage === "COMPLETED") progress.completed++;
-      else if (task.stage === "FAILED") progress.failed++;
     }
 
     return progress;
@@ -797,6 +927,17 @@ export class PipelineProcessor {
   private reportProgress() {
     if (this.config.onProgress) {
       this.config.onProgress(this.getProgress());
+    }
+  }
+
+  /**
+   * Report progress with metadata updates (name/logo)
+   * Only call this when metadata actually changes
+   */
+  private reportProgressWithMetadata(metadata: { name?: string; logo?: string }) {
+    if (this.config.onProgress) {
+      const progress = this.getProgress();
+      this.config.onProgress({ ...progress, ...metadata });
     }
   }
 
@@ -838,5 +979,38 @@ export class PipelineProcessor {
     this.saveQueue = [];
 
     console.log(`[Pipeline] Cleanup completed - all data structures cleared`);
+  }
+
+  /**
+   * Normalize URL to prevent duplicates
+   * - Remove hash fragments
+   * - Remove query parameters (except for pages that require them)
+   * - Remove trailing slash (except for root URLs)
+   * - Lowercase hostname
+   */
+  private normalizeUrl(url: string): string | null {
+    try {
+      const parsed = new URL(url);
+
+      // Lowercase hostname
+      parsed.hostname = parsed.hostname.toLowerCase();
+
+      // Remove hash
+      parsed.hash = '';
+
+      // Remove query params (most docs sites don't need them)
+      // Note: Some sites use query params for content (e.g., search results)
+      // but for documentation scraping, we typically want the canonical version
+      parsed.search = '';
+
+      // Remove trailing slash for non-root paths
+      if (parsed.pathname !== '/' && parsed.pathname.endsWith('/')) {
+        parsed.pathname = parsed.pathname.slice(0, -1);
+      }
+
+      return parsed.href;
+    } catch {
+      return null;
+    }
   }
 }

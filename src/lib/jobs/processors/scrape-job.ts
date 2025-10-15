@@ -68,6 +68,24 @@ export async function processScrapeJob(job: Job<ScrapeJobData>): Promise<ScrapeJ
   ])
 
   try {
+    // Create cancellation check function
+    const checkCancellation = async () => {
+      const job = await prisma.job.findFirst({
+        where: {
+          sourceId,
+          status: { in: ['RUNNING', 'PENDING'] }
+        },
+        select: { status: true, errorMessage: true }
+      });
+
+      // If job doesn't exist or has been marked as FAILED (cancelled), stop processing
+      const cancelled = !job || job.status === 'FAILED';
+      if (cancelled) {
+        console.log(`[Scrape Job ${sourceId}] Job cancellation detected`);
+      }
+      return cancelled;
+    };
+
     let result: { completed: number; failed: number }
 
     // Choose pipeline based on source type
@@ -88,6 +106,7 @@ export async function processScrapeJob(job: Job<ScrapeJobData>): Promise<ScrapeJ
         fetchConcurrency,
         embeddingConcurrency,
         saveConcurrency,
+        checkCancellation, // Pass cancellation check function
         onProgress: (progress: GitHubPipelineProgress) => {
           // Update Bull queue progress
           const totalProgress = Math.floor(((progress.completed + progress.failed) / progress.total) * 100)
@@ -115,7 +134,7 @@ export async function processScrapeJob(job: Job<ScrapeJobData>): Promise<ScrapeJ
       await githubPipeline.cleanup()
 
     } else {
-      // Use website pipeline (default for WEBSITE, CONFLUENCE, CUSTOM)
+      // Use website pipeline for WEBSITE sources
       console.log(`[Scrape Job ${job.id}] Using website pipeline for ${source.url}`)
 
       // MEMORY FIX: Allow environment override for max pages (Railway 1GB limit)
@@ -134,26 +153,35 @@ export async function processScrapeJob(job: Job<ScrapeJobData>): Promise<ScrapeJ
         extractConcurrency,
         embeddingConcurrency,
         saveConcurrency,
+        checkCancellation, // Pass cancellation check function
         onProgress: (progress: PipelineProgress) => {
           // Update Bull queue progress
           const totalProgress = Math.floor(((progress.completed + progress.failed) / progress.total) * 100)
           job.progress(totalProgress)
 
+          // Build progress update object
+          const progressData: any = {
+            queued: progress.queued,
+            fetching: progress.fetching,
+            extracting: progress.extracting,
+            embedding: progress.embedding,
+            saving: progress.saving,
+            completed: progress.completed,
+            failed: progress.failed,
+            total: progress.total,
+          }
+
+          // Include metadata updates if present
+          if (progress.name || progress.logo) {
+            progressData.metadata = {}
+            if (progress.name) progressData.metadata.name = progress.name
+            if (progress.logo) progressData.metadata.logo = progress.logo
+          }
+
           // Update database progress with pipeline stats
           prisma.job.updateMany({
             where: { sourceId, status: 'RUNNING' },
-            data: {
-              progress: {
-                queued: progress.queued,
-                fetching: progress.fetching,
-                extracting: progress.extracting,
-                embedding: progress.embedding,
-                saving: progress.saving,
-                completed: progress.completed,
-                failed: progress.failed,
-                total: progress.total,
-              },
-            },
+            data: { progress: progressData },
           }).catch(console.error)
         },
       })

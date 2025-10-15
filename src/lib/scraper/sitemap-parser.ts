@@ -14,13 +14,14 @@ export interface SitemapResult {
 }
 
 export class SitemapParser {
-  private userAgent = 'ContextStream/1.0 (Documentation Indexer; +https://contextstream.ai)'
-  private maxUrls = 10000 // Safety limit
+  private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
   /**
    * Discover and parse sitemaps
+   * @param baseUrl - The base URL to search for sitemaps
+   * @param maxUrls - Optional maximum number of URLs to return (no limit if not specified)
    */
-  async parse(baseUrl: string): Promise<SitemapResult> {
+  async parse(baseUrl: string, maxUrls?: number): Promise<SitemapResult> {
     const urls = new Set<string>()
 
     // Try common sitemap locations
@@ -31,12 +32,16 @@ export class SitemapParser {
     ]
 
     for (const sitemapUrl of sitemapUrls) {
-      if (urls.size >= this.maxUrls) break
+      if (maxUrls && urls.size >= maxUrls) break
 
-      const result = await this.fetchAndParseSitemap(sitemapUrl)
+      const result = await this.fetchAndParseSitemap(sitemapUrl, maxUrls)
       if (result.length > 0) {
         console.log(`[Sitemap] Found ${result.length} URLs from ${sitemapUrl}`)
-        result.forEach(url => urls.add(url))
+        result.forEach(url => {
+          if (!maxUrls || urls.size < maxUrls) {
+            urls.add(url)
+          }
+        })
       }
     }
 
@@ -44,16 +49,23 @@ export class SitemapParser {
       return { found: false, urls: [] }
     }
 
+    const finalUrls = Array.from(urls)
     return {
       found: true,
-      urls: Array.from(urls).slice(0, this.maxUrls),
+      urls: maxUrls ? finalUrls.slice(0, maxUrls) : finalUrls,
     }
   }
 
   /**
    * Fetch and parse a sitemap XML file
    */
-  private async fetchAndParseSitemap(url: string): Promise<string[]> {
+  private async fetchAndParseSitemap(url: string, maxUrls?: number, depth = 0): Promise<string[]> {
+    // Prevent infinite recursion
+    if (depth > 3) {
+      console.log(`[Sitemap] Max depth reached at ${url}`)
+      return []
+    }
+
     try {
       console.log(`[Sitemap] Checking: ${url}`)
 
@@ -68,11 +80,55 @@ export class SitemapParser {
       }
 
       const xml = await response.text()
-      return this.extractUrlsFromXml(xml)
+
+      // Check if this is a sitemap index or a regular sitemap
+      if (xml.includes('<sitemapindex')) {
+        console.log(`[Sitemap] Found sitemap index at ${url}, fetching child sitemaps...`)
+        return await this.processSitemapIndex(xml, maxUrls, depth)
+      } else {
+        // Regular sitemap with page URLs
+        return this.extractUrlsFromXml(xml)
+      }
     } catch (error) {
       // Sitemap doesn't exist or network error
       return []
     }
+  }
+
+  /**
+   * Process a sitemap index by fetching all child sitemaps
+   */
+  private async processSitemapIndex(xml: string, maxUrls: number | undefined, depth: number): Promise<string[]> {
+    const childSitemapUrls = this.extractUrlsFromXml(xml)
+    const allUrls: string[] = []
+
+    console.log(`[Sitemap] Processing ${childSitemapUrls.length} child sitemaps...`)
+
+    // Fetch child sitemaps with concurrency limit
+    const batchSize = 5 // Process 5 sitemaps at a time
+    for (let i = 0; i < childSitemapUrls.length; i += batchSize) {
+      if (maxUrls && allUrls.length >= maxUrls) {
+        console.log(`[Sitemap] Reached max URLs limit (${maxUrls})`)
+        break
+      }
+
+      const batch = childSitemapUrls.slice(i, i + batchSize)
+      const results = await Promise.all(
+        batch.map(childUrl => this.fetchAndParseSitemap(childUrl, maxUrls, depth + 1))
+      )
+
+      results.forEach(urls => {
+        urls.forEach(url => {
+          if (!maxUrls || allUrls.length < maxUrls) {
+            allUrls.push(url)
+          }
+        })
+      })
+
+      console.log(`[Sitemap] Progress: ${Math.min(i + batchSize, childSitemapUrls.length)}/${childSitemapUrls.length} child sitemaps processed, ${allUrls.length} URLs found`)
+    }
+
+    return allUrls
   }
 
   /**

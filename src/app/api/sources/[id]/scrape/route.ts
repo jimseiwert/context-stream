@@ -102,14 +102,20 @@ export async function POST(
       },
     });
 
-    // Create a new job
+    // Create a new job with proper pipeline progress structure
     const job = await prisma.job.create({
       data: {
         sourceId: id,
         type: "SCRAPE",
         status: "PENDING",
         progress: {
-          pagesScraped: 0,
+          queued: 0,
+          fetching: 0,
+          extracting: 0,
+          embedding: 0,
+          saving: 0,
+          completed: 0,
+          failed: 0,
           total: 0,
         },
       },

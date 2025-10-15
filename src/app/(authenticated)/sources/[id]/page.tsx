@@ -616,6 +616,12 @@ export default function SourceDetailPage({
                   setEditForm({ ...editForm, name: e.target.value })
                 }
                 placeholder="Enter a friendly name"
+                autoFocus={false}
+                onFocus={(e) => {
+                  // Move cursor to end instead of selecting all
+                  const length = e.target.value.length;
+                  e.target.setSelectionRange(length, length);
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -626,12 +632,33 @@ export default function SourceDetailPage({
                 min={1}
                 max={10000}
                 value={editForm.maxPages}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    maxPages: parseInt(e.target.value) || 1000,
-                  })
-                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Allow empty string during typing
+                  if (value === '') {
+                    setEditForm({
+                      ...editForm,
+                      maxPages: '' as any,
+                    });
+                  } else {
+                    const parsed = parseInt(value);
+                    if (!isNaN(parsed)) {
+                      setEditForm({
+                        ...editForm,
+                        maxPages: parsed,
+                      });
+                    }
+                  }
+                }}
+                onBlur={(e) => {
+                  // Enforce default on blur if empty
+                  if (e.target.value === '' || parseInt(e.target.value) < 1) {
+                    setEditForm({
+                      ...editForm,
+                      maxPages: 1000,
+                    });
+                  }
+                }}
               />
               <p className="text-xs text-muted-foreground">
                 Maximum number of pages to crawl and index (1-10,000)

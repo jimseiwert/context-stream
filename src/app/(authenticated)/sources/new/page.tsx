@@ -37,10 +37,11 @@ import { z } from "zod";
 
 const createSourceSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
-  type: z.enum(["WEBSITE", "GITHUB", "CONFLUENCE", "CUSTOM"]),
+  type: z.enum(["WEBSITE", "GITHUB"]),
   scope: z.enum(["GLOBAL", "WORKSPACE"]).optional(),
   maxPages: z.number().min(1).max(10000).optional(),
   respectRobotsTxt: z.boolean().optional(),
+  rescrapeSchedule: z.enum(["NEVER", "DAILY", "WEEKLY", "MONTHLY"]).optional(),
 });
 
 type CreateSourceFormData = z.infer<typeof createSourceSchema>;
@@ -69,11 +70,13 @@ export default function NewSourcePage() {
       scope: "WORKSPACE",
       maxPages: 1000,
       respectRobotsTxt: true,
+      rescrapeSchedule: "NEVER",
     },
   });
 
   const selectedType = watch("type");
   const selectedScope = watch("scope");
+  const selectedRescrapeSchedule = watch("rescrapeSchedule");
 
   const onSubmit = async (data: CreateSourceFormData) => {
     setIsSubmitting(true);
@@ -83,6 +86,7 @@ export default function NewSourcePage() {
         url: data.url,
         type: data.type,
         scope: data.scope, // Include scope if admin selected GLOBAL
+        rescrapeSchedule: data.rescrapeSchedule,
         config: {
           maxPages: data.maxPages,
           respectRobotsTxt: data.respectRobotsTxt,
@@ -115,9 +119,6 @@ export default function NewSourcePage() {
         return <Github className="h-4 w-4" />;
       case "WEBSITE":
         return <Globe className="h-4 w-4" />;
-      case "CONFLUENCE":
-      case "CUSTOM":
-        return <Database className="h-4 w-4" />;
       default:
         return <Globe className="h-4 w-4" />;
     }
@@ -197,18 +198,6 @@ export default function NewSourcePage() {
                     <div className="flex items-center space-x-2">
                       <Github className="h-4 w-4" />
                       <span>GitHub Repository</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="CONFLUENCE">
-                    <div className="flex items-center space-x-2">
-                      <Database className="h-4 w-4" />
-                      <span>Confluence Space</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="CUSTOM">
-                    <div className="flex items-center space-x-2">
-                      <Database className="h-4 w-4" />
-                      <span>Custom Integration</span>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -307,6 +296,31 @@ export default function NewSourcePage() {
                 >
                   Respect robots.txt restrictions
                 </Label>
+              </div>
+
+              {/* Rescrape Schedule */}
+              <div className="space-y-2">
+                <Label htmlFor="rescrapeSchedule">Automatic Rescraping</Label>
+                <Select
+                  value={selectedRescrapeSchedule}
+                  onValueChange={(value) =>
+                    setValue("rescrapeSchedule", value as CreateSourceFormData["rescrapeSchedule"])
+                  }
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select schedule" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NEVER">Never (Manual only)</SelectItem>
+                    <SelectItem value="DAILY">Daily</SelectItem>
+                    <SelectItem value="WEEKLY">Weekly</SelectItem>
+                    <SelectItem value="MONTHLY">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Automatically rescrape this source to keep it up-to-date
+                </p>
               </div>
             </div>
 

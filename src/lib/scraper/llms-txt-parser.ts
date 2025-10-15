@@ -17,7 +17,7 @@ export interface LlmsTxtResult {
 }
 
 export class LlmsTxtParser {
-  private userAgent = 'ContextStream/1.0 (Documentation Indexer; +https://contextstream.ai)'
+  private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
   /**
    * Check for and parse llms.txt files

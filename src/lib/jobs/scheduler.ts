@@ -78,6 +78,21 @@ async function processScheduledRescrapes() {
           `[Scheduler] Queueing automatic rescrape for ${source.domain} (${source.rescrapeSchedule})`
         );
 
+        // Double-check for existing jobs (race condition protection)
+        const existingJob = await prisma.job.findFirst({
+          where: {
+            sourceId: source.id,
+            status: { in: ["PENDING", "RUNNING"] },
+          },
+        });
+
+        if (existingJob) {
+          console.log(
+            `[Scheduler] Skipping ${source.domain} - job already running (ID: ${existingJob.id})`
+          );
+          continue;
+        }
+
         // Update source status and schedule
         const now = new Date();
         const nextScrapeAt = calculateNextScrapeAt(

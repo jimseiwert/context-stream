@@ -138,7 +138,7 @@ export async function checkSourceExists(url: string) {
 export async function createSource(params: {
   url: string;
   domain: string;
-  type: "WEBSITE" | "GITHUB" | "CONFLUENCE" | "CUSTOM";
+  type: "WEBSITE" | "GITHUB";
   workspaceId: string;
   userId: string;
   config?: any;

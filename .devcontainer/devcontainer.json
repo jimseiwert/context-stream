@@ -29,7 +29,10 @@
         "humao.rest-client",
 
         // Markdown
-        "yzhang.markdown-all-in-one"
+        "yzhang.markdown-all-in-one",
+
+        // VS Code Keybindings 
+        "YuTengjing.vscode-classic-experience"
       ],
       "settings": {
         "editor.formatOnSave": true,

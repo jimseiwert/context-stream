@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Loader2, CheckCircle2, XCircle, Clock, StopCircle } from 'lucide-react'
+import { FactoryProgress } from './factory-progress'
+import { useCancelJob } from '@/hooks/use-sources'
 
 interface JobProgress {
   queued: number
@@ -55,8 +57,29 @@ interface JobProgressProps {
 
 export function JobProgressDisplay({ sourceId, onComplete }: JobProgressProps) {
   const [job, setJob] = useState<Job | null>(null)
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const [isPolling, setIsPolling] = useState(false)
   const [elapsedTime, setElapsedTime] = useState<string>('')
+  const [completionParticles, setCompletionParticles] = useState<Array<{ id: string; color: string }>>([])
+  const [prevCompleted, setPrevCompleted] = useState(0)
+
+  const cancelJob = useCancelJob()
+
+  const handleCancelJob = async () => {
+    if (!window.confirm('Are you sure you want to cancel this job?')) {
+      return
+    }
+
+    try {
+      await cancelJob.mutateAsync(sourceId)
+      setIsPolling(false)
+      if (onComplete) {
+        onComplete()
+      }
+    } catch (error) {
+      console.error('Error cancelling job:', error)
+    }
+  }
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null
@@ -68,24 +91,51 @@ export function JobProgressDisplay({ sourceId, onComplete }: JobProgressProps) {
           const data = await response.json()
 
           if (data.job) {
-            setJob(data.job)
+            const incomingJob = data.job
 
-            // Start polling if not already polling and job is active
-            const isActive = data.job.status === 'PENDING' || data.job.status === 'RUNNING'
-            if (isActive && !isPolling) {
-              setIsPolling(true)
-            }
+            // Only switch to a new job if:
+            // 1. It's a different job ID
+            // 2. AND it's actually RUNNING (not just PENDING)
+            // This prevents progress from resetting when new PENDING jobs are created
+            if (incomingJob.id !== currentJobId) {
+              if (incomingJob.status === 'RUNNING') {
+                console.log(`[JobProgress] Switching to new job ${incomingJob.id} (status: ${incomingJob.status})`)
+                setCurrentJobId(incomingJob.id)
+                setJob(incomingJob)
+                setIsPolling(true)
+              } else if (!currentJobId) {
+                // No current job, so show this one even if PENDING
+                console.log(`[JobProgress] First job ${incomingJob.id} (status: ${incomingJob.status})`)
+                setCurrentJobId(incomingJob.id)
+                setJob(incomingJob)
+                if (incomingJob.status === 'PENDING' || incomingJob.status === 'RUNNING') {
+                  setIsPolling(true)
+                }
+              } else {
+                // Different job but still PENDING - keep showing current job
+                console.log(`[JobProgress] Ignoring PENDING job ${incomingJob.id}, keeping current job ${currentJobId}`)
+              }
+            } else {
+              // Same job, update progress
+              setJob(incomingJob)
 
-            // Stop polling if job is completed or failed
-            if (data.job.status === 'COMPLETED' || data.job.status === 'FAILED') {
-              setIsPolling(false)
-              if (onComplete) {
-                onComplete()
+              // Start polling if not already polling and job is active
+              const isActive = incomingJob.status === 'PENDING' || incomingJob.status === 'RUNNING'
+              if (isActive && !isPolling) {
+                setIsPolling(true)
+              }
+
+              // Stop polling if job is completed or failed
+              if (incomingJob.status === 'COMPLETED' || incomingJob.status === 'FAILED') {
+                setIsPolling(false)
+                if (onComplete) {
+                  onComplete()
+                }
               }
             }
           } else {
-            // No active job
-            setJob(null)
+            // No active job returned from API
+            // Keep showing the last completed/failed job, but stop polling
             setIsPolling(false)
           }
         }
@@ -107,7 +157,7 @@ export function JobProgressDisplay({ sourceId, onComplete }: JobProgressProps) {
         clearInterval(intervalId)
       }
     }
-  }, [sourceId, isPolling, onComplete])
+  }, [sourceId, isPolling, onComplete, currentJobId])
 
   // Update elapsed time every second for running jobs
   useEffect(() => {
@@ -131,6 +181,32 @@ export function JobProgressDisplay({ sourceId, onComplete }: JobProgressProps) {
       }
     }
   }, [job?.startedAt, job?.completedAt, job?.status])
+
+  // Spawn completion particles when items complete
+  useEffect(() => {
+    if (!job) return
+
+    const newCompleted = job.progress.completed
+    if (newCompleted > prevCompleted && prevCompleted > 0) {
+      // Items completed! Spawn particles
+      const newItems = newCompleted - prevCompleted
+      const colors = ['from-blue-400 to-blue-600', 'from-purple-400 to-purple-600', 'from-orange-400 to-orange-600', 'from-indigo-400 to-indigo-600']
+
+      for (let i = 0; i < Math.min(newItems, 5); i++) {
+        const particleId = `${Date.now()}-${i}`
+        const color = colors[Math.floor(Math.random() * colors.length)]
+
+        setCompletionParticles(prev => [...prev, { id: particleId, color }])
+
+        // Remove particle after animation completes
+        setTimeout(() => {
+          setCompletionParticles(prev => prev.filter(p => p.id !== particleId))
+        }, 1200)
+      }
+    }
+
+    setPrevCompleted(newCompleted)
+  }, [job?.progress.completed])
 
   if (!job) {
     return null
@@ -194,6 +270,18 @@ export function JobProgressDisplay({ sourceId, onComplete }: JobProgressProps) {
               </Badge>
             )}
             {getStatusBadge()}
+            {isActive && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelJob}
+                disabled={cancelJob.isPending}
+                className="gap-2"
+              >
+                <StopCircle className="h-4 w-4" />
+                {cancelJob.isPending ? 'Cancelling...' : 'Cancel'}
+              </Button>
+            )}
           </div>
         </div>
         <CardDescription>
@@ -203,84 +291,28 @@ export function JobProgressDisplay({ sourceId, onComplete }: JobProgressProps) {
       <CardContent className="space-y-4">
         {isActive && (
           <>
-            {/* Overall Progress Bar */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Overall Progress</span>
-                <span className="font-medium">
-                  {totalProcessed} / {job.progress.total} pages ({percentComplete}%)
+            {/* Overall Progress Stats */}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground font-medium">Overall Progress</span>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold tabular-nums">
+                  {totalProcessed}<span className="text-muted-foreground mx-1">/</span>{job.progress.total}
                 </span>
-              </div>
-              <Progress value={percentComplete} className="h-2" />
-            </div>
-
-            {/* Pipeline Stats Grid */}
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              {/* Queued */}
-              <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Queued</div>
-                  <div className="text-lg font-bold">{job.progress.queued}</div>
-                </div>
-              </div>
-
-              {/* Fetching */}
-              <div className="flex items-center gap-2 p-3 border rounded-lg bg-blue-50 dark:bg-blue-950">
-                <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Fetching</div>
-                  <div className="text-lg font-bold text-blue-600">{job.progress.fetching}</div>
-                </div>
-              </div>
-
-              {/* Extracting */}
-              <div className="flex items-center gap-2 p-3 border rounded-lg bg-purple-50 dark:bg-purple-950">
-                <Loader2 className="h-4 w-4 text-purple-600 animate-spin" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Extracting</div>
-                  <div className="text-lg font-bold text-purple-600">{job.progress.extracting}</div>
-                </div>
-              </div>
-
-              {/* Embedding */}
-              <div className="flex items-center gap-2 p-3 border rounded-lg bg-orange-50 dark:bg-orange-950">
-                <Loader2 className="h-4 w-4 text-orange-600 animate-spin" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Embedding</div>
-                  <div className="text-lg font-bold text-orange-600">{job.progress.embedding}</div>
-                </div>
-              </div>
-
-              {/* Saving */}
-              <div className="flex items-center gap-2 p-3 border rounded-lg bg-indigo-50 dark:bg-indigo-950">
-                <Loader2 className="h-4 w-4 text-indigo-600 animate-spin" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Saving</div>
-                  <div className="text-lg font-bold text-indigo-600">{job.progress.saving}</div>
-                </div>
-              </div>
-
-              {/* Completed */}
-              <div className="flex items-center gap-2 p-3 border rounded-lg bg-green-50 dark:bg-green-950">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Completed</div>
-                  <div className="text-lg font-bold text-green-600">{job.progress.completed}</div>
-                </div>
+                <span className="text-xs text-muted-foreground">({percentComplete}%)</span>
               </div>
             </div>
 
-            {/* Failed Count (if any) */}
-            {job.progress.failed > 0 && (
-              <div className="flex items-center gap-2 p-3 border border-red-200 rounded-lg bg-red-50 dark:bg-red-950">
-                <XCircle className="h-4 w-4 text-red-600" />
-                <div className="flex-1">
-                  <div className="text-xs text-muted-foreground">Failed Pages</div>
-                  <div className="text-lg font-bold text-red-600">{job.progress.failed}</div>
-                </div>
-              </div>
-            )}
+            {/* High-Tech Pipeline Dashboard */}
+            <FactoryProgress
+              queued={job.progress.queued}
+              fetching={job.progress.fetching}
+              extracting={job.progress.extracting}
+              embedding={job.progress.embedding}
+              saving={job.progress.saving}
+              completed={job.progress.completed}
+              failed={job.progress.failed}
+              total={job.progress.total}
+            />
           </>
         )}
 

@@ -144,8 +144,6 @@ model Workspace {
 enum SourceType {
   WEBSITE // Documentation websites
   GITHUB // GitHub repositories
-  CONFLUENCE // Confluence spaces
-  CUSTOM // Custom integrations
 }
 
 enum SourceStatus {

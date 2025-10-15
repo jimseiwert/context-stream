@@ -23,7 +23,7 @@ export const runtime = "nodejs";
 const CreateSourceSchema = z.object({
   url: z.string().url("Invalid URL format"),
   workspaceId: z.string().uuid("Invalid workspace ID").optional(),
-  type: z.enum(["WEBSITE", "GITHUB", "CONFLUENCE", "CUSTOM"]),
+  type: z.enum(["WEBSITE", "GITHUB"]),
   scope: z.enum(["GLOBAL", "WORKSPACE"]).optional(), // Only admins can set to GLOBAL
   config: z
     .object({
@@ -419,23 +419,41 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create a job record
-    const job = await prisma.job.create({
-      data: {
+    // Check for existing jobs (shouldn't happen for new source, but safety check)
+    const existingJob = await prisma.job.findFirst({
+      where: {
         sourceId: newSource.id,
-        type: "SCRAPE",
-        status: "PENDING",
-        progress: {
-          url: normalizedUrl,
-          type: data.type,
-          pagesScraped: 0,
-          total: 0,
-        },
+        status: { in: ["PENDING", "RUNNING"] },
       },
     });
 
-    // Queue scraping job
-    await addScrapeJob(newSource.id);
+    let job;
+    if (existingJob) {
+      console.warn(`[API] Job already exists for new source ${newSource.id}, using existing job`);
+      job = existingJob;
+    } else {
+      // Create a job record with proper pipeline progress structure
+      job = await prisma.job.create({
+        data: {
+          sourceId: newSource.id,
+          type: "SCRAPE",
+          status: "PENDING",
+          progress: {
+            queued: 0,
+            fetching: 0,
+            extracting: 0,
+            embedding: 0,
+            saving: 0,
+            completed: 0,
+            failed: 0,
+            total: 0,
+          },
+        },
+      });
+
+      // Queue scraping job
+      await addScrapeJob(newSource.id);
+    }
 
     // Track usage (SaaS only) - only count WORKSPACE sources against quota
     // Global sources are free and available to all users

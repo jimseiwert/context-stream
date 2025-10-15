@@ -86,8 +86,8 @@
 
   /* Selection styles */
   ::selection {
-    background: hsl(var(--primary) / 0.2);
-    color: hsl(var(--primary-foreground));
+    background: hsl(var(--primary) / 0.3);
+    color: hsl(var(--foreground));
   }
 
   /* Loading skeleton animation */
@@ -109,6 +109,317 @@
     );
     background-size: 200px 100%;
     animation: skeleton-loading 1.5s ease-in-out infinite;
+  }
+
+  /* Shimmer animation for progress bars */
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  /* Lava lamp blob animation - bounces up and down while flowing right to left */
+  @keyframes lava-flow {
+    0% {
+      transform: translateX(0%) translateY(0px) scale(1);
+    }
+    25% {
+      transform: translateX(-25%) translateY(-8px) scale(1.1, 0.9);
+    }
+    50% {
+      transform: translateX(-50%) translateY(0px) scale(1);
+    }
+    75% {
+      transform: translateX(-75%) translateY(8px) scale(0.9, 1.1);
+    }
+    100% {
+      transform: translateX(-100%) translateY(0px) scale(0.8);
+      opacity: 0.5;
+    }
+  }
+
+  .animate-lava-flow {
+    animation: lava-flow 3s ease-in-out forwards;
+  }
+
+  /* Continuous blob generation animation */
+  @keyframes blob-bounce {
+    0%, 100% {
+      transform: translateY(0px) scale(1);
+    }
+    50% {
+      transform: translateY(-6px) scale(1.05, 0.95);
+    }
+  }
+
+  .animate-blob-bounce {
+    animation: blob-bounce 1.5s ease-in-out infinite;
+  }
+
+  /* Drip effect for blobs entering from the right */
+  @keyframes drip-in {
+    0% {
+      transform: translateX(30px) translateY(-15px) scale(0.5);
+      opacity: 0;
+    }
+    50% {
+      transform: translateX(10px) translateY(8px) scale(1.3, 0.7);
+    }
+    100% {
+      transform: translateX(0px) translateY(0px) scale(1);
+      opacity: 1;
+    }
+  }
+
+  .animate-drip-in {
+    animation: drip-in 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Pulse glow effect for active stages */
+  @keyframes pulse-glow {
+    0%, 100% {
+      opacity: 0.6;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  /* Completion particle - breaks off and merges into green */
+  @keyframes complete-merge {
+    0% {
+      transform: translateX(50px) translateY(0px) scale(1);
+      opacity: 1;
+    }
+    20% {
+      transform: translateX(30px) translateY(-15px) scale(1.2);
+    }
+    40% {
+      transform: translateX(15px) translateY(-5px) scale(1);
+    }
+    60% {
+      transform: translateX(5px) translateY(5px) scale(0.8);
+    }
+    80% {
+      transform: translateX(0px) translateY(0px) scale(0.5);
+      opacity: 0.8;
+    }
+    100% {
+      transform: translateX(-10px) translateY(0px) scale(0);
+      opacity: 0;
+    }
+  }
+
+  .animate-complete-merge {
+    animation: complete-merge 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* Water splash/ripple effect on the edge */
+  @keyframes water-splash {
+    0% {
+      clip-path: polygon(
+        0% 0%, 100% 0%,
+        100% 20%, 95% 25%, 100% 30%,
+        100% 40%, 95% 45%, 100% 50%,
+        100% 60%, 95% 65%, 100% 70%,
+        100% 80%, 95% 85%, 100% 90%,
+        100% 100%, 0% 100%
+      );
+    }
+    25% {
+      clip-path: polygon(
+        0% 0%, 100% 0%,
+        100% 15%, 92% 22%, 100% 28%,
+        100% 35%, 93% 43%, 100% 48%,
+        100% 55%, 92% 63%, 100% 68%,
+        100% 75%, 93% 83%, 100% 88%,
+        100% 100%, 0% 100%
+      );
+    }
+    50% {
+      clip-path: polygon(
+        0% 0%, 100% 0%,
+        100% 18%, 94% 24%, 100% 32%,
+        100% 42%, 92% 48%, 100% 54%,
+        100% 62%, 94% 68%, 100% 74%,
+        100% 82%, 92% 88%, 100% 92%,
+        100% 100%, 0% 100%
+      );
+    }
+    75% {
+      clip-path: polygon(
+        0% 0%, 100% 0%,
+        100% 22%, 93% 28%, 100% 34%,
+        100% 44%, 91% 50%, 100% 56%,
+        100% 64%, 93% 70%, 100% 76%,
+        100% 84%, 91% 90%, 100% 94%,
+        100% 100%, 0% 100%
+      );
+    }
+    100% {
+      clip-path: polygon(
+        0% 0%, 100% 0%,
+        100% 20%, 95% 25%, 100% 30%,
+        100% 40%, 95% 45%, 100% 50%,
+        100% 60%, 95% 65%, 100% 70%,
+        100% 80%, 95% 85%, 100% 90%,
+        100% 100%, 0% 100%
+      );
+    }
+  }
+
+  .animate-water-splash {
+    animation: water-splash 2s ease-in-out infinite;
+  }
+
+  /* Wave effect for the edge */
+  @keyframes wave-edge {
+    0%, 100% {
+      d: path("M0,0 L0,48 Q5,40 10,48 T20,48 T30,48 L30,0 Z");
+    }
+    50% {
+      d: path("M0,0 L0,48 Q5,56 10,48 T20,48 T30,48 L30,0 Z");
+    }
+  }
+
+  /* Factory Conveyor Belt - moves right to left pattern */
+  @keyframes conveyor-move {
+    0% {
+      background-position: 0px 0px;
+    }
+    100% {
+      background-position: 40px 0px;
+    }
+  }
+
+  .animate-conveyor {
+    animation: conveyor-move 2s linear infinite;
+  }
+
+  /* Box traveling on conveyor */
+  @keyframes box-travel {
+    0% {
+      transform: translateX(0) translateY(0);
+    }
+    100% {
+      transform: translateX(100%) translateY(0);
+    }
+  }
+
+  .animate-box-travel {
+    animation: box-travel 8s linear forwards;
+  }
+
+  /* Stamping machine - goes down and up */
+  @keyframes stamp-down {
+    0%, 80%, 100% {
+      transform: translateY(-100%);
+    }
+    10%, 70% {
+      transform: translateY(0);
+    }
+  }
+
+  .animate-stamp {
+    animation: stamp-down 2s ease-in-out infinite;
+  }
+
+  /* Crusher machine - smashes down */
+  @keyframes crush {
+    0%, 90%, 100% {
+      transform: translateY(-120%) scaleY(1);
+    }
+    10%, 80% {
+      transform: translateY(0) scaleY(0.5);
+    }
+  }
+
+  .animate-crush {
+    animation: crush 2s ease-in-out infinite;
+  }
+
+  /* Item gets crushed and drops */
+  @keyframes crush-drop {
+    0% {
+      transform: translateX(0) translateY(0) scale(1);
+      opacity: 1;
+    }
+    30% {
+      transform: translateX(0) translateY(0) scale(1, 0.3);
+    }
+    50% {
+      transform: translateX(0) translateY(10px) scale(0.5, 0.5);
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(0) translateY(80px) scale(0.3, 0.3);
+      opacity: 0;
+    }
+  }
+
+  .animate-crush-drop {
+    animation: crush-drop 1s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  }
+
+  /* Bin filling animation */
+  @keyframes bin-fill {
+    0% {
+      transform: scaleY(0);
+      transform-origin: bottom;
+    }
+    100% {
+      transform: scaleY(1);
+      transform-origin: bottom;
+    }
+  }
+
+  /* Machine processing indicator */
+  @keyframes process-pulse {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+  }
+
+  .animate-process {
+    animation: process-pulse 1.5s ease-in-out infinite;
+  }
+
+  /* Spark effect when stamping */
+  @keyframes spark {
+    0% {
+      transform: scale(0) rotate(0deg);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.5) rotate(180deg);
+      opacity: 0.8;
+    }
+    100% {
+      transform: scale(0) rotate(360deg);
+      opacity: 0;
+    }
+  }
+
+  .animate-spark {
+    animation: spark 0.6s ease-out infinite;
   }
 }
 

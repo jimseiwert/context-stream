@@ -48,6 +48,7 @@ export interface GitHubPipelineConfig {
   embeddingConcurrency?: number;
   saveConcurrency?: number;
   onProgress?: (progress: GitHubPipelineProgress) => void;
+  checkCancellation?: () => Promise<boolean>; // Check if job has been cancelled
 }
 
 export class GitHubPipelineProcessor {
@@ -60,7 +61,13 @@ export class GitHubPipelineProcessor {
   private saveQueue: GitHubTask[] = [];
 
   private isProcessing = false;
+  private isCancelled = false;
   private config: GitHubPipelineConfig;
+
+  // Progress counters (independent of task map for accurate progress after cleanup)
+  private totalTasksDiscovered = 0;
+  private totalCompleted = 0;
+  private totalFailed = 0;
 
   // Track failures by stage for detailed reporting
   private failuresByStage = {
@@ -126,6 +133,7 @@ export class GitHubPipelineProcessor {
       };
       this.tasks.set(file.path, task);
       this.fetchQueue.push(task);
+      this.totalTasksDiscovered++;
     }
 
     this.reportProgress();
@@ -218,7 +226,17 @@ export class GitHubPipelineProcessor {
   }
 
   private async fetchWorker(owner: string, repo: string, branch?: string) {
-    while (this.isProcessing) {
+    while (this.isProcessing && !this.isCancelled) {
+      // Check for cancellation every iteration
+      if (this.config.checkCancellation) {
+        const cancelled = await this.config.checkCancellation();
+        if (cancelled) {
+          console.log('[GitHub Pipeline] Cancellation detected, stopping fetch worker');
+          this.isCancelled = true;
+          break;
+        }
+      }
+
       const task = this.fetchQueue.shift();
       if (!task) {
         await this.sleep(100);
@@ -249,6 +267,7 @@ export class GitHubPipelineProcessor {
         );
         task.stage = "FAILED";
         task.error = `[FETCH] ${error.message}`;
+        this.totalFailed++;
         this.failuresByStage.fetch.push({ path: task.file.path, error: error.message });
         this.reportProgress();
       }
@@ -267,7 +286,17 @@ export class GitHubPipelineProcessor {
   }
 
   private async embedWorker() {
-    while (this.isProcessing) {
+    while (this.isProcessing && !this.isCancelled) {
+      // Check for cancellation every iteration
+      if (this.config.checkCancellation) {
+        const cancelled = await this.config.checkCancellation();
+        if (cancelled) {
+          console.log('[GitHub Pipeline] Cancellation detected, stopping embed worker');
+          this.isCancelled = true;
+          break;
+        }
+      }
+
       const task = this.embedQueue.shift();
       if (!task || !task.content) {
         await this.sleep(100);
@@ -312,6 +341,7 @@ export class GitHubPipelineProcessor {
         );
         task.stage = "FAILED";
         task.error = `[EMBED] ${error.message}`;
+        this.totalFailed++;
         this.failuresByStage.embed.push({ path: task.file.path, error: error.message });
         this.reportProgress();
       }
@@ -330,7 +360,17 @@ export class GitHubPipelineProcessor {
   }
 
   private async saveWorker() {
-    while (this.isProcessing) {
+    while (this.isProcessing && !this.isCancelled) {
+      // Check for cancellation every iteration
+      if (this.config.checkCancellation) {
+        const cancelled = await this.config.checkCancellation();
+        if (cancelled) {
+          console.log('[GitHub Pipeline] Cancellation detected, stopping save worker');
+          this.isCancelled = true;
+          break;
+        }
+      }
+
       const task = this.saveQueue.shift();
       if (!task || !task.content) {
         await this.sleep(100);
@@ -378,6 +418,7 @@ export class GitHubPipelineProcessor {
         }
 
         task.stage = "COMPLETED";
+        this.totalCompleted++;
 
         // MEMORY FIX: Clear task data after completion
         task.content = undefined;
@@ -397,6 +438,7 @@ export class GitHubPipelineProcessor {
         );
         task.stage = "FAILED";
         task.error = `[SAVE] ${error.message}`;
+        this.totalFailed++;
         this.failuresByStage.save.push({ path: task.file.path, error: error.message });
         this.reportProgress();
       }
@@ -428,15 +470,14 @@ export class GitHubPipelineProcessor {
       fetching: 0,
       embedding: this.embedQueue.length,
       saving: this.saveQueue.length,
-      completed: 0,
-      failed: 0,
-      total: this.tasks.size,
+      completed: this.totalCompleted,  // Use persistent counter
+      failed: this.totalFailed,  // Use persistent counter
+      total: this.totalTasksDiscovered,  // Use persistent counter
     };
 
+    // Still need to count FETCHING tasks from the map since they're actively being processed
     for (const task of Array.from(this.tasks.values())) {
       if (task.stage === "FETCHING") progress.fetching++;
-      else if (task.stage === "COMPLETED") progress.completed++;
-      else if (task.stage === "FAILED") progress.failed++;
     }
 
     return progress;
