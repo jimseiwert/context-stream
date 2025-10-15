@@ -1,0 +1,30 @@
+{
+    "redirects": [
+        {
+            "source": "/(.*)",
+            "has": [
+                {
+                    "type": "host",
+                    "value": "www.contextstream.dev"
+                }
+            ],
+            "destination": "https://contextstream.dev/$1",
+            "permanent": true
+        }
+    ],
+    "headers": [
+        {
+            "source": "/api/auth/(.*)",
+            "headers": [
+                {
+                    "key": "Access-Control-Allow-Origin",
+                    "value": "https://contextstream.dev"
+                },
+                {
+                    "key": "Access-Control-Allow-Credentials",
+                    "value": "true"
+                }
+            ]
+        }
+    ]
+}

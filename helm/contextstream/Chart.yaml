@@ -1,0 +1,17 @@
+apiVersion: v2
+name: contextstream
+description: A Helm chart for ContextStream - AI-powered documentation and code search
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - contextstream
+  - documentation
+  - ai
+  - search
+home: https://github.com/yourusername/context-stream
+sources:
+  - https://github.com/yourusername/context-stream
+maintainers:
+  - name: ContextStream Team
+    email: support@contextstream.dev

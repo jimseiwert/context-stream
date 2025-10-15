@@ -1,0 +1,57 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="iconGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#06b6d4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="iconGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#06b6d4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#10b981;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" fill="#000000" rx="96"/>
+
+  <!-- Outer frame -->
+  <path d="M 256 80 L 410 180 L 410 332 L 256 432 L 102 332 L 102 180 Z"
+        stroke="url(#iconGrad1)"
+        stroke-width="8"
+        fill="none"
+        opacity="0.4"/>
+
+  <!-- Top node -->
+  <polygon points="256,110 286,128 286,164 256,182 226,164 226,128"
+           fill="url(#iconGrad1)"/>
+
+  <!-- Left node -->
+  <polygon points="150,200 180,218 180,254 150,272 120,254 120,218"
+           fill="url(#iconGrad2)"/>
+
+  <!-- Right node -->
+  <polygon points="362,200 392,218 392,254 362,272 332,254 332,218"
+           fill="url(#iconGrad2)"/>
+
+  <!-- Center node (largest) -->
+  <polygon points="256,230 296,254 296,302 256,326 216,302 216,254"
+           fill="url(#iconGrad1)"/>
+
+  <!-- Bottom nodes -->
+  <polygon points="180,350 210,368 210,404 180,422 150,404 150,368"
+           fill="url(#iconGrad1)"/>
+
+  <polygon points="332,350 362,368 362,404 332,422 302,404 302,368"
+           fill="url(#iconGrad1)"/>
+
+  <!-- Connection lines -->
+  <line x1="256" y1="182" x2="256" y2="230" stroke="url(#iconGrad1)" stroke-width="6" opacity="0.6"/>
+  <line x1="180" y1="236" x2="216" y2="254" stroke="url(#iconGrad2)" stroke-width="6" opacity="0.6"/>
+  <line x1="332" y1="236" x2="296" y2="254" stroke="url(#iconGrad2)" stroke-width="6" opacity="0.6"/>
+  <line x1="230" y1="302" x2="195" y2="350" stroke="url(#iconGrad1)" stroke-width="6" opacity="0.6"/>
+  <line x1="282" y1="302" x2="317" y2="350" stroke="url(#iconGrad1)" stroke-width="6" opacity="0.6"/>
+
+  <!-- Center glow -->
+  <circle cx="256" cy="268" r="35" fill="url(#iconGrad1)" opacity="0.3"/>
+</svg>

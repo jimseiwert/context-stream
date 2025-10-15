@@ -1,0 +1,67 @@
+# ========================================
+# Worker Dockerfile for Background Job Processing
+# ========================================
+
+# ========================================
+# Stage 1: Dependencies
+# ========================================
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+# Install dependencies for Prisma and native modules
+RUN apk add --no-cache openssl libc6-compat
+
+# Copy package files
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install dependencies (including tsx for running TypeScript)
+RUN npm ci && \
+    npm cache clean --force
+
+# Generate Prisma Client
+RUN npx prisma generate
+
+# ========================================
+# Stage 2: Runner
+# ========================================
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apk add --no-cache openssl libc6-compat curl
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 worker
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/prisma ./prisma/
+
+# Copy source code
+COPY src ./src
+COPY package*.json ./
+COPY tsconfig.json ./
+COPY scripts ./scripts
+
+# Make entrypoint script executable and set ownership to non-root user
+RUN chmod +x ./scripts/worker-entrypoint.sh && \
+    chown -R worker:nodejs /app
+
+USER worker
+
+# Set production environment
+ENV NODE_ENV=production
+
+# Increase Node.js heap size for processing large pages
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
+# Health check (checks if worker process is running)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD pgrep -f "worker.ts" > /dev/null || exit 1
+
+# Run database migrations and start the worker
+CMD ["./scripts/worker-entrypoint.sh"]

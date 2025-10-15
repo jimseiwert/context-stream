@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # Redis for job queues
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # Background worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    depends_on:
+      - redis
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - ./src:/app/src:ro
+      - ./prisma:/app/prisma:ro
+
+volumes:
+  redis_data:

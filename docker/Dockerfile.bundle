@@ -1,0 +1,169 @@
+# ========================================
+# All-in-One Bundle Dockerfile
+# Includes: Next.js App, Worker, Redis, PostgreSQL
+# NOTE: This is for simple deployments. For production,
+# use separate containers (Dockerfile.app + Dockerfile.worker)
+# ========================================
+
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# ========================================
+# Install System Dependencies
+# ========================================
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    gnupg \
+    lsb-release \
+    ca-certificates \
+    supervisor \
+    postgresql-14 \
+    postgresql-contrib-14 \
+    redis-server \
+    git \
+    build-essential \
+    postgresql-server-dev-14 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install pgvector extension from source
+RUN cd /tmp && \
+    git clone --branch v0.7.0 https://github.com/pgvector/pgvector.git && \
+    cd pgvector && \
+    make && \
+    make install && \
+    cd / && \
+    rm -rf /tmp/pgvector
+
+# ========================================
+# Install Node.js 20
+# ========================================
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g npm@latest && \
+    rm -rf /var/lib/apt/lists/*
+
+# ========================================
+# Install Application Dependencies
+# ========================================
+COPY package*.json ./
+COPY prisma ./prisma/
+
+RUN npm ci && npm cache clean --force
+RUN npx prisma generate
+
+# ========================================
+# Copy Application Code
+# ========================================
+COPY . .
+
+# Add placeholder environment variables for build
+# These will be overridden at runtime with real values
+ENV BETTER_AUTH_SECRET=build-time-placeholder-secret-key-min-32-chars
+ENV STRIPE_SECRET_KEY=sk_build_placeholder
+ENV DATABASE_URL=postgresql://contextstream:changeme@localhost:5432/contextstream
+ENV REDIS_URL=redis://localhost:6379
+
+# Build Next.js application
+RUN npm run build
+
+# Make migration script executable
+RUN chmod +x ./scripts/bundle-migrate.sh
+
+# ========================================
+# Configure PostgreSQL
+# ========================================
+USER postgres
+RUN /etc/init.d/postgresql start && \
+    psql --command "CREATE USER contextstream WITH SUPERUSER PASSWORD 'changeme';" && \
+    createdb -O contextstream contextstream && \
+    psql --command "CREATE EXTENSION IF NOT EXISTS vector;" contextstream
+
+USER root
+
+# ========================================
+# Configure Supervisor
+# ========================================
+RUN mkdir -p /var/log/supervisor
+
+COPY <<EOF /etc/supervisor/conf.d/supervisord.conf
+[supervisord]
+nodaemon=true
+user=root
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+
+[program:postgresql]
+command=/usr/lib/postgresql/14/bin/postgres -D /var/lib/postgresql/14/main -c config_file=/etc/postgresql/14/main/postgresql.conf
+user=postgres
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/supervisor/postgresql.err.log
+stdout_logfile=/var/log/supervisor/postgresql.out.log
+priority=1
+
+[program:redis]
+command=/usr/bin/redis-server --appendonly yes --dir /var/lib/redis
+user=redis
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/supervisor/redis.err.log
+stdout_logfile=/var/log/supervisor/redis.out.log
+priority=2
+
+[program:migrations]
+command=/app/scripts/bundle-migrate.sh
+autostart=true
+autorestart=false
+startsecs=0
+stderr_logfile=/var/log/supervisor/migrations.err.log
+stdout_logfile=/var/log/supervisor/migrations.out.log
+priority=3
+
+[program:nextjs]
+command=/bin/bash -c "sleep 10 && cd /app && node server.js"
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/supervisor/nextjs.err.log
+stdout_logfile=/var/log/supervisor/nextjs.out.log
+environment=NODE_ENV="production",PORT="3000",DATABASE_URL="postgresql://contextstream:changeme@localhost:5432/contextstream",REDIS_URL="redis://localhost:6379"
+priority=4
+
+[program:worker]
+command=/bin/bash -c "sleep 15 && cd /app && npm run worker"
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/supervisor/worker.err.log
+stdout_logfile=/var/log/supervisor/worker.out.log
+environment=NODE_ENV="production",DATABASE_URL="postgresql://contextstream:changeme@localhost:5432/contextstream",REDIS_URL="redis://localhost:6379",NODE_OPTIONS="--max-old-space-size=2048"
+priority=5
+EOF
+
+# ========================================
+# Expose Ports
+# ========================================
+EXPOSE 3000 5432 6379
+
+# ========================================
+# Set Default Environment Variables
+# ========================================
+ENV NODE_ENV=production \
+    DATABASE_URL=postgresql://contextstream:changeme@localhost:5432/contextstream \
+    REDIS_URL=redis://localhost:6379 \
+    PORT=3000 \
+    NODE_OPTIONS="--max-old-space-size=2048"
+
+# ========================================
+# Health Check
+# ========================================
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+# ========================================
+# Start Supervisor
+# ========================================
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

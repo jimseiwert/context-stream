@@ -1,0 +1,114 @@
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: contextstream-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-contextstream}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-contextstream}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-contextstream}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - contextstream-network
+
+  # Redis for job queues and caching
+  redis:
+    image: redis:7-alpine
+    container_name: contextstream-redis
+    restart: unless-stopped
+    command: >
+      sh -c "
+        if [ -n \"$$REDIS_PASSWORD\" ]; then
+          redis-server --appendonly yes --requirepass $$REDIS_PASSWORD
+        else
+          redis-server --appendonly yes
+        fi
+      "
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: >
+        sh -c "
+          if [ -n \"$$REDIS_PASSWORD\" ]; then
+            redis-cli -a $$REDIS_PASSWORD ping
+          else
+            redis-cli ping
+          fi
+        "
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - contextstream-network
+
+  # Development workspace (optional - for running app in container)
+  # Comment out if you prefer running the app locally
+  app:
+    image: mcr.microsoft.com/devcontainers/typescript-node:20-bullseye
+    container_name: contextstream-app
+    restart: unless-stopped
+    env_file: ../.env
+    #environment:
+      # - NODE_ENV=development
+      # Database URL: Use from .env if set, otherwise fallback to local postgres
+      # To use Neon in production, set DATABASE_URL in .env
+      # For local development with Docker postgres, leave DATABASE_URL unset
+      #- DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-contextstream}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-contextstream}}
+      #- REDIS_URL=redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379
+      # All other environment variables are loaded from .env file
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - ../:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - contextstream-network
+    working_dir: /app
+    command: sleep infinity
+
+  # Background worker for job processing
+  worker:
+    image: mcr.microsoft.com/devcontainers/typescript-node:20-bullseye
+    container_name: contextstream-worker
+    restart: unless-stopped
+    env_file: ../.env
+    volumes:
+      - ../:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - contextstream-network
+    working_dir: /app
+    command: sleep infinity
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  contextstream-network:
+    driver: bridge

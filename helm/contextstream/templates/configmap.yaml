@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "contextstream.fullname" . }}
+  labels:
+    {{- include "contextstream.labels" . | nindent 4 }}
+data:
+  NODE_ENV: {{ .Values.env.NODE_ENV | quote }}
+  {{- range $key, $value := .Values.env }}
+  {{- if ne $key "NODE_ENV" }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}

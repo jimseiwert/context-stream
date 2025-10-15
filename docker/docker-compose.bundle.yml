@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # All-in-one ContextStream bundle
+  # Contains: App, Worker, Redis, and PostgreSQL
+  contextstream:
+    image: ${DOCKER_REGISTRY:-jimseiwert}/context-stream:bundle-${VERSION:-latest}
+    container_name: contextstream-bundle
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile.bundle
+    environment:
+      # Authentication
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+
+      # OAuth Providers (optional)
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+
+      # API Keys
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      # Stripe (optional)
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+
+      # Database (internal to container)
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+
+      # Application settings
+      NODE_ENV: production
+    ports:
+      - "${APP_PORT:-3000}:3000"
+      # Optionally expose database and redis for external access
+      # - "${POSTGRES_PORT:-5432}:5432"
+      # - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      # Persist database and redis data
+      - postgres_data:/var/lib/postgresql/14/main
+      - redis_data:/var/lib/redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

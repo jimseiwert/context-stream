@@ -1,0 +1,153 @@
+# Default values for contextstream
+replicaCount:
+  app: 2
+  worker: 1
+
+image:
+  registry: jimseiwert
+  repository: context-stream
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  # Tags are prefixed with the component name (e.g., app-latest, worker-main)
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 1001
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1001
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: contextstream.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: contextstream-tls
+      hosts:
+        - contextstream.example.com
+
+resources:
+  app:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  worker:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# PostgreSQL configuration
+postgresql:
+  enabled: true
+  auth:
+    username: contextstream
+    password: changeme
+    database: contextstream
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 512Mi
+  image:
+    repository: pgvector/pgvector
+    tag: pg16
+
+# Redis configuration
+redis:
+  enabled: true
+  auth:
+    enabled: false
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+# Environment variables
+env:
+  NODE_ENV: production
+  # Add your environment variables here
+  # OPENAI_API_KEY: ""
+  # BETTER_AUTH_SECRET: ""
+  # etc.
+
+# Secrets (use external secret management in production)
+secrets: {}
+  # OPENAI_API_KEY: "your-secret-key"
+  # BETTER_AUTH_SECRET: "your-secret"
+
+# External database (if not using built-in PostgreSQL)
+externalDatabase:
+  enabled: false
+  host: ""
+  port: 5432
+  username: ""
+  password: ""
+  database: ""
+
+# External Redis (if not using built-in Redis)
+externalRedis:
+  enabled: false
+  host: ""
+  port: 6379
+  password: ""

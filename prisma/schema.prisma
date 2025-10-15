@@ -1,0 +1,481 @@
+// ContextStream - Prisma Database Schema
+// Global Source Architecture with Role-Based Access Control
+// Version: 1.0
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector", schema: "public")]
+}
+
+// ========================================
+// User Management & Authentication (better-auth)
+// ========================================
+
+enum UserRole {
+  SUPER_ADMIN // Can manage global sources, system settings, user roles
+  ADMIN // Can manage global sources, promote sources
+  USER // Can manage workspace sources only
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Custom fields
+  role UserRole @default(USER)
+
+  // Relationships
+  accounts     Account[]
+  sessions     Session[]
+  workspaces   Workspace[]
+  apiKeys      ApiKey[]
+  queryLogs    QueryLog[]
+  subscription Subscription?
+
+  @@index([role])
+  @@index([email])
+}
+
+// better-auth Account model (OAuth providers)
+model Account {
+  id           String    @id @default(uuid())
+  accountId    String
+  providerId   String
+  userId       String
+  accessToken  String?   @db.Text
+  refreshToken String?   @db.Text
+  idToken      String?   @db.Text
+  expiresAt    DateTime?
+  password     String?   @db.Text // For credentials provider
+  scope        String?   @db.Text // OAuth scopes
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+// better-auth Session model
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([token])
+}
+
+// better-auth Verification model (email verification, password reset)
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([identifier, value])
+}
+
+// API Keys for MCP authentication
+model ApiKey {
+  id         String    @id @default(uuid())
+  name       String // e.g., "Claude Desktop", "VS Code Extension"
+  key        String    @unique // SHA-256 hashed key
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([key])
+}
+
+// ========================================
+// Workspaces & Multi-Tenancy
+// ========================================
+
+model Workspace {
+  id      String  @id @default(uuid())
+  name    String
+  slug    String  @unique
+  ownerId String?
+  owner   User?   @relation(fields: [ownerId], references: [id])
+
+  // Relationships
+  sources WorkspaceSource[] // Many-to-many with sources
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([slug])
+}
+
+// ========================================
+// Sources & Documentation
+// ========================================
+
+enum SourceType {
+  WEBSITE // Documentation websites
+  GITHUB // GitHub repositories
+  CONFLUENCE // Confluence spaces
+  CUSTOM // Custom integrations
+}
+
+enum SourceStatus {
+  PENDING // Initial state, queued for indexing
+  INDEXING // Currently being scraped
+  ACTIVE // Successfully indexed and active
+  ERROR // Last indexing failed
+  PAUSED // Manually paused
+}
+
+enum SourceScope {
+  GLOBAL // Accessible to all workspaces (admin-managed)
+  WORKSPACE // Private to specific workspaces
+}
+
+enum RescrapeSchedule {
+  NEVER // Manual rescraping only
+  DAILY // Rescrape every day
+  WEEKLY // Rescrape every week
+  MONTHLY // Rescrape every month
+}
+
+// Core Source table - stores actual scraped content ONCE
+model Source {
+  id        String      @id @default(uuid())
+  url       String      @unique // GLOBAL uniqueness constraint
+  domain    String
+  name      String? // Optional display name
+  logo      String? // Favicon/logo URL
+  type      SourceType
+  scope     SourceScope @default(WORKSPACE)
+  pageCount Int         @default(0) // Cached count of pages
+
+  // Source metadata
+  config        Json? // Scraping config, auth, etc.
+  status        SourceStatus @default(PENDING)
+  lastScrapedAt DateTime?
+  lastUpdatedAt DateTime?
+  errorMessage  String?      @db.Text
+
+  // Automatic rescraping schedule
+  rescrapeSchedule      RescrapeSchedule @default(NEVER)
+  nextScrapeAt          DateTime?
+  lastAutomatedScrapeAt DateTime?
+
+  // Search & ranking metadata
+  tags     String[] @default([]) // ["framework:nextjs", "topic:caching", "docs:official"]
+  metadata Json? // Additional metadata (language, version, etc.)
+  quality  Int      @default(50) // Quality score 0-100 for ranking
+
+  // Scraped content (stored once, referenced many times)
+  pages               Page[]
+  jobs                Job[]
+  batchEmbeddingJobs  BatchEmbeddingJob[] @relation("batch_embedding_jobs")
+
+  // Relationships
+  workspaceSources WorkspaceSource[] // Many-to-many with workspaces
+  usageStats       SourceUsageStats?
+
+  // Audit trail
+  createdById        String?
+  promotedToGlobalAt DateTime?
+  promotedById       String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scope])
+  @@index([domain])
+  @@index([status])
+  @@index([url])
+  @@index([nextScrapeAt])
+  @@index([rescrapeSchedule])
+}
+
+// Join table: Links workspaces to sources (many-to-many)
+model WorkspaceSource {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceId    String
+  source      Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  // Workspace-specific overrides
+  customConfig Json? // Override global scraping config
+  addedAt      DateTime @default(now())
+  addedBy      String? // User who added this to workspace
+
+  @@unique([workspaceId, sourceId])
+  @@index([workspaceId])
+  @@index([sourceId])
+}
+
+// Pages are shared across all workspaces using this source
+model Page {
+  id          String  @id @default(uuid())
+  sourceId    String
+  source      Source  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  url         String
+  title       String?
+  contentText String  @db.Text // Plain text for FTS
+  contentHtml String? @db.Text // Original HTML
+  metadata    Json? // Headings, code blocks, etc.
+  checksum    String // SHA-256 for change detection
+
+  // Relationships
+  chunks Chunk[]
+
+  // Timestamps
+  indexedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sourceId, url])
+  @@index([sourceId])
+  @@index([checksum])
+  @@map("pages")
+}
+
+// Content chunks with embeddings (also shared)
+model Chunk {
+  id         String                       @id @default(uuid())
+  pageId     String
+  page       Page                         @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  chunkIndex Int
+  content    String                       @db.Text
+  embedding  Unsupported("vector(1536)")? // pgvector for OpenAI embeddings
+  metadata   Json? // Chunk-specific metadata
+  createdAt  DateTime                     @default(now())
+
+  @@unique([pageId, chunkIndex])
+  @@index([pageId])
+  @@map("chunks")
+}
+
+// ========================================
+// Background Jobs
+// ========================================
+
+enum JobType {
+  SCRAPE // Initial scraping of source
+  EMBED // Generate embeddings for pages
+  UPDATE // Update existing source
+}
+
+enum JobStatus {
+  PENDING // Queued, waiting to start
+  RUNNING // Currently processing
+  COMPLETED // Successfully finished
+  FAILED // Failed with error
+  CANCELLED // Manually cancelled
+}
+
+model Job {
+  id           String    @id @default(uuid())
+  sourceId     String
+  source       Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  type         JobType
+  status       JobStatus @default(PENDING)
+  progress     Json? // {pagesScraped, total, errors, currentPage, etc.}
+  result       Json? // Final results summary
+  errorMessage String?   @db.Text
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([sourceId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Batch embedding jobs (for 50% cost savings on re-scrapes)
+model BatchEmbeddingJob {
+  id              String    @id @default(uuid())
+  sourceId        String    @map("source_id")
+  source          Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade, name: "batch_embedding_jobs")
+  openaiBatchId   String    @unique @map("openai_batch_id")
+  status          String    @default("validating") // OpenAI batch statuses: validating, failed, in_progress, finalizing, completed, expired, cancelled
+  requestCount    Int       @default(0) @map("request_count")
+  successCount    Int?      @map("success_count")
+  errorCount      Int?      @map("error_count")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  completedAt     DateTime? @map("completed_at")
+
+  @@index([sourceId])
+  @@index([status])
+  @@map("batch_embedding_jobs")
+}
+
+// ========================================
+// Search & Analytics
+// ========================================
+
+// Query logs track workspace-specific usage
+model QueryLog {
+  id           String   @id @default(uuid())
+  query        String   @db.Text
+  resultsCount Int?
+  topPageIds   String[]
+  sourceIds    String[] // Which sources were queried
+  latencyMs    Int?
+  workspaceId  String?
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  queriedAt    DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([queriedAt])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("query_logs")
+}
+
+// Source usage analytics (for promotion decisions)
+model SourceUsageStats {
+  id             String    @id @default(uuid())
+  sourceId       String    @unique
+  source         Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  workspaceCount Int       @default(0) // How many workspaces use this
+  queryCount     Int       @default(0) // Total queries across all workspaces
+  lastQueriedAt  DateTime?
+  calculatedAt   DateTime  @default(now())
+
+  @@index([workspaceCount])
+  @@index([queryCount])
+  @@index([sourceId])
+}
+
+// Audit log for administrative actions
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  action     String // 'PROMOTE_SOURCE', 'DEMOTE_SOURCE', 'DELETE_SOURCE', etc.
+  entityType String // 'SOURCE', 'USER', 'WORKSPACE'
+  entityId   String
+  before     Json? // State before action
+  after      Json? // State after action
+  reason     String?  @db.Text
+  ipAddress  String?
+  userAgent  String?
+  timestamp  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+}
+
+// ========================================
+// Subscriptions & Billing (SaaS Only)
+// ========================================
+
+enum PlanTier {
+  FREE
+  STARTER
+  PRO
+  TEAM
+  ENTERPRISE
+  SELF_HOSTED // Special tier for self-hosted users
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+  INCOMPLETE
+}
+
+// User subscription and quotas
+model Subscription {
+  id       String   @id @default(uuid())
+  userId   String   @unique
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planTier PlanTier @default(FREE)
+
+  // Quotas per plan
+  searchesPerMonth Int @default(50)
+  maxSources       Int @default(3)
+  maxWorkspaces    Int @default(1)
+  maxPagesIndexed  Int @default(500)
+  apiRateLimit     Int @default(30) // requests per minute
+
+  // Usage tracking (resets monthly)
+  searchesUsed   Int @default(0)
+  sourcesUsed    Int @default(0)
+  workspacesUsed Int @default(0)
+  pagesIndexed   Int @default(0)
+
+  // Billing
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String? // Current price ID
+  billingCycle         DateTime? // Current billing period start
+  resetAt              DateTime // Monthly usage reset date
+
+  // Status
+  status            SubscriptionStatus @default(ACTIVE)
+  cancelAtPeriodEnd Boolean            @default(false)
+  trialEndsAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([planTier])
+  @@index([status])
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
+}
+
+enum UsageEventType {
+  SEARCH // Search query performed
+  SOURCE_ADDED // New source added
+  PAGE_INDEXED // Page indexed
+  API_REQUEST // API call made
+  WORKSPACE_CREATED // New workspace created
+}
+
+// Usage event tracking for analytics
+model UsageEvent {
+  id        String         @id @default(uuid())
+  userId    String
+  eventType UsageEventType
+  count     Int            @default(1)
+  metadata  Json? // Additional context (workspace, source, etc.)
+  timestamp DateTime       @default(now())
+
+  @@index([userId, eventType, timestamp])
+  @@index([timestamp])
+}
