@@ -25,6 +25,7 @@ const CreateSourceSchema = z.object({
   workspaceId: z.string().uuid("Invalid workspace ID").optional(),
   type: z.enum(["WEBSITE", "GITHUB"]),
   scope: z.enum(["GLOBAL", "WORKSPACE"]).optional(), // Only admins can set to GLOBAL
+  rescrapeSchedule: z.enum(["NEVER", "DAILY", "WEEKLY", "MONTHLY"]).optional(),
   config: z
     .object({
       maxPages: z.number().min(1).max(10000).optional(),
@@ -396,6 +397,7 @@ export async function POST(request: NextRequest) {
         type: data.type,
         status: "PENDING",
         config: data.config,
+        rescrapeSchedule: data.rescrapeSchedule || "NEVER",
         createdById: session.user.id,
         // Only create workspace link for WORKSPACE sources
         ...(targetScope === "WORKSPACE" && workspaceId

@@ -1,30 +1,57 @@
-# ContextStream
+# 🌊 ContextStream
 
-AI-powered documentation and code search platform.
+> Your personal AI-powered documentation search engine. Index, search, and chat with your docs using cutting-edge semantic search.
 
-## Features
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker Pulls](https://img.shields.io/docker/pulls/jimseiwert/context-stream)](https://hub.docker.com/r/jimseiwert/context-stream)
+[![GitHub Stars](https://img.shields.io/github/stars/yourusername/context-stream?style=social)](https://github.com/yourusername/context-stream)
 
-- 🔍 **Intelligent Search**: AI-powered semantic search across your documentation
-- 📚 **Multi-Source Support**: Index documentation from GitHub, websites, and more
-- 🤖 **AI Chat**: Ask questions about your documentation in natural language
-- 🔄 **Auto-Sync**: Automatic synchronization with your documentation sources
-- 🎨 **Modern UI**: Clean, responsive interface built with Next.js and Tailwind CSS
-- 🔐 **Authentication**: Secure authentication with OAuth providers
-- 💳 **Subscription Management**: Built-in Stripe integration for billing
+**ContextStream** is an open-source platform that brings the power of AI-driven semantic search to your documentation. Whether you're building an internal knowledge base, indexing your company's docs, or just want to search through your favorite frameworks' documentation faster, ContextStream has you covered.
 
-## Quick Start
+## ✨ Why ContextStream?
+
+Traditional documentation search relies on keyword matching, which often misses the mark. ContextStream uses **AI embeddings and semantic search** to understand what you're actually asking for - not just matching keywords, but understanding intent and context.
+
+- 🧠 **Semantic Search**: Ask questions naturally, get relevant answers
+- 🔌 **Multiple Sources**: GitHub repos, websites, wikis, and more
+- 💬 **AI Chat Interface**: Ask questions, get answers from your docs
+- 🔄 **Auto-Sync**: Keep your docs fresh with automatic updates
+- 🎯 **MCP Integration**: Works with Claude and other AI coding assistants
+- 🔐 **Privacy-First**: Self-hosted, your data stays yours
+- 🚀 **Fast & Efficient**: Hybrid BM25 + vector search for optimal results
+
+## 💖 Support This Project
+
+ContextStream is **free and open-source**, but hosting, development, and maintenance require time and resources. If you find this project helpful, please consider supporting it!
+
+### 🌟 Ways to Support
+
+- **Star this repo** - It helps with visibility!
+- **Sponsor on GitHub** - [Become a sponsor](https://github.com/sponsors/yourusername) to help keep this project alive
+- **Share** - Tell others about ContextStream
+- **Contribute** - Code, docs, bug reports, and ideas are all welcome!
+
+### 💝 Current Sponsors
+
+Your logo here! Be the first to support this project and get your name/logo featured here.
+
+*Interested in sponsoring? [Get in touch](mailto:support@contextstream.dev)*
+
+## 🚀 Quick Start
+
+Get up and running in under 5 minutes!
 
 ### Prerequisites
 
 - Docker and Docker Compose
-- OpenAI API key
+- OpenAI API key ([get one here](https://platform.openai.com/api-keys))
 - 2GB RAM minimum (4GB recommended)
 
 ### One-Command Deploy
 
 ```bash
-# Download and run
-curl -o docker-compose.yml https://raw.githubusercontent.com/yourusername/context-stream/main/docker-compose.bundle.yml
+# Download docker-compose file
+curl -o docker-compose.yml https://raw.githubusercontent.com/yourusername/context-stream/main/docker/docker-compose.bundle.yml
 
 # Create environment file
 cat > .env << EOF
@@ -33,202 +60,195 @@ BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 NEXTAUTH_SECRET=$(openssl rand -base64 32)
 EOF
 
-# Start the application
+# Start ContextStream
 docker-compose up -d
 
-# Open http://localhost:3000 in your browser
+# Visit http://localhost:3000 🎉
 ```
 
-## Deployment Options
+That's it! You now have your own AI-powered documentation search engine running locally.
 
-ContextStream offers flexible deployment options to suit your needs:
+## 🎯 Use Cases
 
-### 🚀 Quick Deploy (All-in-One)
+- **Developer Teams**: Index your internal wikis, API docs, and codebases
+- **Content Teams**: Search through marketing materials, guides, and knowledge bases
+- **Students/Researchers**: Build a personal search engine for your research papers and notes
+- **Open Source Maintainers**: Make your project's docs more discoverable
+- **AI Coding Assistants**: Use with Claude Code or other AI tools via MCP
 
-Perfect for testing or small deployments. Everything runs in a single container.
+## 🐳 Deployment Options
 
-- **Image**: `jimseiwert/context-stream:bundle-latest`
-- **What's included**: App + Worker + PostgreSQL + Redis
-- **Best for**: Demos, development, small teams
-- **Resources**: 2GB RAM, 10GB disk
+Choose the deployment that fits your needs:
 
-[View Bundle Deployment Guide →](DEPLOYMENT.md#option-1-all-in-one-bundle-simplest)
-
-### 🐳 Docker Compose (Recommended)
-
-Production-ready multi-container setup with better performance and scalability.
-
-- **Images**:
-  - `jimseiwert/context-stream:app-latest` (Web app)
-  - `jimseiwert/context-stream:worker-latest` (Background jobs)
-  - `pgvector/pgvector:pg16` (PostgreSQL with vector support)
-  - `redis:7-alpine` (Redis for queues)
-- **Best for**: Production deployments, better scaling
-- **Resources**: 4GB RAM, 20GB disk
-
-[View Docker Compose Guide →](DEPLOYMENT.md#option-2-multi-container-setup-recommended)
-
-### ☸️ Kubernetes / Helm
-
-Enterprise-ready deployment with auto-scaling and high availability.
-
-- **Helm Chart**: `contextstream/contextstream`
-- **Best for**: Large-scale deployments, enterprise
-- **Features**: Auto-scaling, high availability, managed services support
-
-[View Kubernetes Guide →](DEPLOYMENT.md#kubernetes-deployment)
-
-## Documentation
-
-- [📖 Deployment Guide](DEPLOYMENT.md) - Complete deployment instructions
-- [⚙️ Configuration Guide](CONFIGURATION.md) - Environment variables and settings
-- [🐳 Docker Images](https://hub.docker.com/r/jimseiwert/context-stream) - Available Docker images
-- [📦 Helm Chart](helm/contextstream/README.md) - Kubernetes deployment
-- [🔧 API Documentation](docs/API.md) - REST API reference
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Load Balancer / Ingress                 │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-              ┌──────────┴──────────┐
-              ▼                     ▼
-        ┌──────────┐          ┌──────────┐
-        │   App    │          │   App    │  (Multiple replicas)
-        │ (Next.js)│          │ (Next.js)│
-        └────┬─────┘          └────┬─────┘
-             │                     │
-             └──────────┬──────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        ▼               ▼               ▼
-   ┌─────────┐    ┌─────────┐    ┌─────────┐
-   │PostgreSQL│    │  Redis  │    │ Worker  │
-   │(pgvector)│    │ (Queue) │    │  (Jobs) │
-   └─────────┘    └─────────┘    └─────────┘
-```
-
-## Development
-
-### Local Setup
+### Bundle (Easiest)
+Perfect for getting started or small teams. Everything in one container.
 
 ```bash
-# Clone the repository
+docker run -d \
+  -e OPENAI_API_KEY=your-key \
+  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -p 3000:3000 \
+  jimseiwert/context-stream:bundle-latest
+```
+
+### Docker Compose (Recommended)
+Production-ready setup with separate services for better performance.
+
+[📖 Docker Compose Setup Guide](DEPLOYMENT.md#option-2-multi-container-setup-recommended)
+
+### Kubernetes / Helm
+Enterprise-ready with auto-scaling and high availability.
+
+[📖 Kubernetes Setup Guide](DEPLOYMENT.md#kubernetes-deployment)
+
+## 🛠️ Tech Stack
+
+Built with modern, battle-tested technologies:
+
+- **Frontend**: Next.js 15, React 19, TailwindCSS, shadcn/ui
+- **Backend**: Next.js API Routes, Prisma ORM
+- **Database**: PostgreSQL 16 with pgvector
+- **Search**: Hybrid BM25 + Vector similarity
+- **Queue**: Bull (Redis-based)
+- **Auth**: Better Auth with OAuth support
+- **AI**: OpenAI Embeddings & GPT-4
+- **Deployment**: Docker, Kubernetes
+
+## 📚 Core Features
+
+### Intelligent Search
+Uses hybrid search combining traditional BM25 with AI vector embeddings for the best of both worlds.
+
+### Multi-Workspace Support
+Organize your docs into workspaces - personal, team, or global. Control access and permissions.
+
+### MCP Server Integration
+Built-in Model Context Protocol server for seamless integration with Claude Code and other AI coding assistants. Search your docs without leaving your editor!
+
+### Auto-Sync & Webhooks
+Keep your docs fresh with automatic synchronization. Set schedules or use webhooks for instant updates.
+
+### Modern UI
+Clean, responsive interface built with Next.js and Tailwind. Works great on desktop and mobile.
+
+## 🤝 Contributing
+
+We ❤️ contributions! Whether you're fixing bugs, adding features, improving docs, or just discussing ideas, you're welcome here.
+
+### How to Contribute
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+3. **Commit** your changes: `git commit -m 'Add amazing feature'`
+4. **Push** to the branch: `git push origin feature/amazing-feature`
+5. **Open** a Pull Request
+
+Check out our [Contributing Guide](CONTRIBUTING.md) for more details.
+
+### Good First Issues
+
+New to the project? Look for issues tagged with [`good first issue`](https://github.com/yourusername/context-stream/labels/good%20first%20issue) - these are great starting points!
+
+## 🔧 Development Setup
+
+Want to contribute or run locally? Here's how:
+
+```bash
+# Clone the repo
 git clone https://github.com/yourusername/context-stream.git
 cd context-stream
 
 # Install dependencies
 npm install
 
-# Setup database
+# Start dependencies (PostgreSQL, Redis)
 docker-compose up -d postgres redis
 
-# Create .env file
+# Setup environment
 cp .env.example .env
-# Edit .env with your configuration
+# Edit .env with your values
 
-# Run database migrations
+# Run migrations
 npm run db:migrate
 
-# Start development server
+# Start dev server
 npm run dev
 
 # In another terminal, start the worker
 npm run worker
 ```
 
-### Building Docker Images
+Visit `http://localhost:3000` and start hacking! 🎉
 
-```bash
-# Build app image
-docker build -f Dockerfile.app -t jimseiwert/context-stream:app-latest .
+## 📖 Documentation
 
-# Build worker image
-docker build -f Dockerfile.worker -t jimseiwert/context-stream:worker-latest .
+- [🚀 Deployment Guide](DEPLOYMENT.md) - Complete deployment instructions
+- [⚙️ Configuration](CONFIGURATION.md) - Environment variables and settings
+- [🐳 Docker Images](https://hub.docker.com/r/jimseiwert/context-stream) - Available images
+- [☸️ Helm Chart](helm/contextstream/README.md) - Kubernetes deployment
+- [🔌 API Docs](docs/API.md) - REST API reference
+- [🤖 MCP Integration](docs/MCP.md) - Model Context Protocol setup
 
-# Build bundle image
-docker build -f Dockerfile.bundle -t jimseiwert/context-stream:bundle-latest .
-```
+## 🗺️ Roadmap
 
-## Environment Variables
+Exciting features on the horizon:
 
-### Required
-
-| Variable | Description |
-|----------|-------------|
-| `OPENAI_API_KEY` | Your OpenAI API key for embeddings |
-| `BETTER_AUTH_SECRET` | Secret for authentication (32+ characters) |
-| `NEXTAUTH_SECRET` | Secret for NextAuth (32+ characters) |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `REDIS_URL` | Redis connection string |
-
-### Optional
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `BETTER_AUTH_URL` | Public URL of your app | `http://localhost:3000` |
-| `GITHUB_CLIENT_ID` | GitHub OAuth app client ID | - |
-| `GITHUB_CLIENT_SECRET` | GitHub OAuth app secret | - |
-| `GOOGLE_CLIENT_ID` | Google OAuth app client ID | - |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth app secret | - |
-| `STRIPE_SECRET_KEY` | Stripe secret key | - |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret | - |
-
-[View Complete Configuration Guide →](DEPLOYMENT.md#environment-variables)
-
-## Tech Stack
-
-- **Frontend**: Next.js 15, React 19, TailwindCSS
-- **Backend**: Next.js API Routes, Prisma ORM
-- **Database**: PostgreSQL 16 with pgvector extension
-- **Queue**: Bull (Redis-based)
-- **Authentication**: Better Auth
-- **AI**: OpenAI Embeddings & GPT-4
-- **Deployment**: Docker, Kubernetes
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- 📧 Email: support@contextstream.dev
-- 💬 Discussions: [GitHub Discussions](https://github.com/yourusername/context-stream/discussions)
-- 🐛 Bug Reports: [GitHub Issues](https://github.com/yourusername/context-stream/issues)
-- 📖 Documentation: [Wiki](https://github.com/yourusername/context-stream/wiki)
-
-## Roadmap
-
-- [ ] Support for more documentation sources
+- [ ] Multi-modal search (images, diagrams, code screenshots)
+- [ ] Local embedding models (no OpenAI dependency)
+- [ ] More data sources (Notion, Confluence, Google Docs)
 - [ ] Advanced analytics and insights
-- [ ] API for third-party integrations
-- [ ] Self-hosted embedding models
-- [ ] Multi-tenant support
-- [ ] Advanced permission controls
+- [ ] Browser extension for quick searches
+- [ ] Mobile app
+- [ ] Plugin system for custom integrations
+- [ ] Self-hosted LLM support (Ollama, LM Studio)
 
-## Acknowledgments
+Have an idea? [Open an issue](https://github.com/yourusername/context-stream/issues/new) or start a [discussion](https://github.com/yourusername/context-stream/discussions)!
 
-Built with amazing open-source tools:
+## 📊 Project Stats
 
-- [Next.js](https://nextjs.org/)
-- [Prisma](https://www.prisma.io/)
-- [pgvector](https://github.com/pgvector/pgvector)
-- [Bull](https://github.com/OptimalBits/bull)
-- [OpenAI](https://openai.com/)
-- [TailwindCSS](https://tailwindcss.com/)
+- **Stars**: ⭐ [Star us on GitHub](https://github.com/yourusername/context-stream)
+- **Docker Pulls**: 🐳 Check out our [Docker Hub](https://hub.docker.com/r/jimseiwert/context-stream)
+- **Contributors**: 👥 See all our amazing [contributors](https://github.com/yourusername/context-stream/graphs/contributors)
+
+## 💬 Community & Support
+
+Join our community and get help:
+
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/context-stream/discussions) - Ask questions, share ideas
+- **Issues**: [GitHub Issues](https://github.com/yourusername/context-stream/issues) - Bug reports and feature requests
+- **Email**: support@contextstream.dev - Direct support
+- **Discord**: Coming soon! 🎮
+
+## 🙏 Acknowledgments
+
+ContextStream wouldn't be possible without these amazing open-source projects:
+
+- [Next.js](https://nextjs.org/) - The React framework
+- [Prisma](https://www.prisma.io/) - Next-generation ORM
+- [pgvector](https://github.com/pgvector/pgvector) - Vector similarity search for PostgreSQL
+- [Bull](https://github.com/OptimalBits/bull) - Premium queue package
+- [Better Auth](https://www.better-auth.com/) - Modern authentication
+- [TailwindCSS](https://tailwindcss.com/) - Utility-first CSS framework
+- [shadcn/ui](https://ui.shadcn.com/) - Beautiful UI components
+
+And a huge thanks to all our [contributors](https://github.com/yourusername/context-stream/graphs/contributors)! 🎉
+
+## 📄 License
+
+ContextStream is open-source software licensed under the [MIT License](LICENSE).
+
+You're free to use, modify, and distribute this software. See the LICENSE file for full details.
+
+## 🌟 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/context-stream&type=Date)](https://star-history.com/#yourusername/context-stream&Date)
 
 ---
 
-Made with ❤️ by the ContextStream team
+<div align="center">
+
+**Made with ❤️ by the open-source community**
+
+[⭐ Star this repo](https://github.com/yourusername/context-stream) • [🐦 Follow updates](https://twitter.com/yourusername) • [💬 Join discussions](https://github.com/yourusername/context-stream/discussions)
+
+</div>

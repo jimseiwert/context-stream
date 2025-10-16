@@ -18,7 +18,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Github, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -34,6 +34,9 @@ export default function LoginPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [isGithubLoading, setIsGithubLoading] = useState(false);
+  const [authCapabilities, setAuthCapabilities] = useState<{
+    hasGithub: boolean;
+  } | null>(null);
 
   const {
     register,
@@ -42,6 +45,17 @@ export default function LoginPage() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
+
+  // Fetch available auth capabilities on mount
+  useEffect(() => {
+    fetch("/api/auth/capabilities")
+      .then((r) => r.json())
+      .then(setAuthCapabilities)
+      .catch((err) => {
+        console.error("Failed to fetch auth capabilities:", err);
+        setAuthCapabilities({ hasGithub: false });
+      });
+  }, []);
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
@@ -153,30 +167,34 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">
-              Or continue with
-            </span>
-          </div>
-        </div>
+        {authCapabilities?.hasGithub && (
+          <>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or continue with
+                </span>
+              </div>
+            </div>
 
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={handleGithubLogin}
-          disabled={isGithubLoading}
-        >
-          {isGithubLoading ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Github className="mr-2 h-4 w-4" />
-          )}
-          GitHub
-        </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleGithubLogin}
+              disabled={isGithubLoading}
+            >
+              {isGithubLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Github className="mr-2 h-4 w-4" />
+              )}
+              GitHub
+            </Button>
+          </>
+        )}
       </CardContent>
       <CardFooter>
         <p className="text-sm text-muted-foreground text-center w-full">

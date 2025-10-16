@@ -15,12 +15,28 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useAdminRescrapeSource,
@@ -28,7 +44,10 @@ import {
   useRescrapeSource,
   useSources,
   useGlobalSources,
+  useAddSourceToWorkspace,
+  GlobalSource,
 } from "@/hooks/use-sources";
+import { useWorkspaces } from "@/hooks/use-workspaces";
 import {
   getQuotaExceededMessage,
   useUpgradePrompt,
@@ -59,10 +78,17 @@ export default function SourcesPage() {
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [globalPage, setGlobalPage] = useState(1);
   const [accumulatedGlobalSources, setAccumulatedGlobalSources] = useState<any[]>([]);
+  const [addToWorkspaceDialog, setAddToWorkspaceDialog] = useState<{
+    open: boolean;
+    source: GlobalSource | null;
+  }>({ open: false, source: null });
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
 
   // No workspaceId needed - API will use user's personal workspace
   const { data: sources = [], isLoading } = useSources();
   const { data: globalData, isLoading: isLoadingGlobal } = useGlobalSources(globalSearchQuery, globalPage);
+  const { data: workspaces = [] } = useWorkspaces();
+  const addSourceToWorkspace = useAddSourceToWorkspace();
 
   // Accumulate global sources as we load more pages
   React.useEffect(() => {
@@ -166,6 +192,27 @@ export default function SourcesPage() {
     if (isAtLimit) {
       upgradePrompt.showUpgradePrompt(getQuotaExceededMessage("source"));
     }
+  };
+
+  const handleAddToWorkspace = (source: GlobalSource) => {
+    setAddToWorkspaceDialog({ open: true, source });
+    // Default to first workspace
+    if (workspaces.length > 0) {
+      setSelectedWorkspaceId(workspaces[0].id);
+    }
+  };
+
+  const handleConfirmAddToWorkspace = async () => {
+    if (!addToWorkspaceDialog.source || !selectedWorkspaceId) return;
+
+    await addSourceToWorkspace.mutateAsync({
+      workspaceId: selectedWorkspaceId,
+      sourceId: addToWorkspaceDialog.source.id,
+    });
+
+    // Close dialog
+    setAddToWorkspaceDialog({ open: false, source: null });
+    setSelectedWorkspaceId("");
   };
 
   return (
@@ -295,7 +342,7 @@ export default function SourcesPage() {
                           href={`/sources/${source.id}`}
                           className="hover:text-primary transition-colors"
                         >
-                          {source.domain}
+                          {source.name || source.domain}
                         </Link>
                       </CardTitle>
                       <CardDescription className="text-xs truncate">
@@ -442,10 +489,9 @@ export default function SourcesPage() {
                 {accumulatedGlobalSources.map((source) => (
                   <Card
                     key={source.id}
-                    className="hover:shadow-md transition-all duration-200 cursor-pointer"
-                    onClick={() => window.open(source.url, '_blank')}
+                    className="hover:shadow-md transition-all duration-200 flex flex-col"
                   >
-                    <CardContent className="p-4 flex flex-col items-center text-center space-y-2">
+                    <CardContent className="p-4 flex flex-col items-center text-center space-y-3 flex-1">
                       <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden">
                         {source.logo ? (
                           <>
@@ -478,6 +524,14 @@ export default function SourcesPage() {
                           {source.pageCount.toLocaleString()} pages
                         </p>
                       </div>
+                      <Button
+                        size="sm"
+                        className="w-full mt-auto"
+                        onClick={() => handleAddToWorkspace(source)}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add to Workspace
+                      </Button>
                     </CardContent>
                   </Card>
                 ))}
@@ -513,6 +567,62 @@ export default function SourcesPage() {
         currentTier={upgradePrompt.currentTier}
         suggestedTier={upgradePrompt.suggestedTier}
       />
+
+      {/* Add to Workspace Dialog */}
+      <Dialog
+        open={addToWorkspaceDialog.open}
+        onOpenChange={(open) =>
+          setAddToWorkspaceDialog({ open, source: addToWorkspaceDialog.source })
+        }
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Source to Workspace</DialogTitle>
+            <DialogDescription>
+              Choose which workspace to add &quot;{addToWorkspaceDialog.source?.name || addToWorkspaceDialog.source?.domain}&quot; to.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="workspace">Workspace</Label>
+              <Select
+                value={selectedWorkspaceId}
+                onValueChange={setSelectedWorkspaceId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a workspace" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workspaces.map((workspace) => (
+                    <SelectItem key={workspace.id} value={workspace.id}>
+                      {workspace.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddToWorkspaceDialog({ open: false, source: null });
+                setSelectedWorkspaceId("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmAddToWorkspace}
+              disabled={!selectedWorkspaceId || addSourceToWorkspace.isPending}
+            >
+              {addSourceToWorkspace.isPending ? "Adding..." : "Add to Workspace"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

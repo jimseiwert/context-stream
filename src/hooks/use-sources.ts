@@ -69,6 +69,7 @@ export interface CreateSourceInput {
   type: "WEBSITE" | "GITHUB";
   scope?: "GLOBAL" | "WORKSPACE"; // Optional - defaults to WORKSPACE
   workspaceId?: string; // Optional - API will use user's workspace if not provided
+  rescrapeSchedule?: "NEVER" | "DAILY" | "WEEKLY" | "MONTHLY";
   config?: {
     maxPages?: number;
     respectRobotsTxt?: boolean;
@@ -386,5 +387,36 @@ export function useGlobalSources(search?: string, page = 1) {
       return response;
     },
     staleTime: 5 * 60 * 1000, // Consider fresh for 5 minutes
+  });
+}
+
+// Add a source to a workspace
+export function useAddSourceToWorkspace() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      workspaceId,
+      sourceId,
+    }: {
+      workspaceId: string;
+      sourceId: string;
+    }) => {
+      const response = await apiClient.post<{
+        message: string;
+        workspaceSource: any;
+      }>(`/api/workspaces/${workspaceId}/sources`, { sourceId });
+      return response;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      toast.success(data.message || "Source added to workspace successfully");
+    },
+    onError: (error: any) => {
+      const message =
+        error.data?.error || error.message || "Failed to add source to workspace";
+      toast.error(message);
+    },
   });
 }

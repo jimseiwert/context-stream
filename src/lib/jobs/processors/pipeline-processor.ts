@@ -24,6 +24,7 @@ import * as cheerio from "cheerio";
 export interface PageTask {
   url: string;
   depth: number;
+  referer?: string; // Page that linked to this one (for proper browser simulation)
   stage:
     | "QUEUED"
     | "FETCHING"
@@ -91,10 +92,9 @@ export class PipelineProcessor {
   private isCancelled = false;
   private config: PipelineConfig;
 
-  // Track best name score and whether we've found a logo
-  // Always check first few pages to potentially find better metadata
+  // Track best name score - always check first few pages to potentially find better metadata
+  // During rescrape, we preserve existing good metadata by initializing with reasonable baseline scores
   private bestNameScore = 0;
-  private hasLogo = false;
   private pagesCheckedForMetadata = 0;
   private readonly MAX_PAGES_TO_CHECK_FOR_METADATA = 3;
 
@@ -139,9 +139,15 @@ export class PipelineProcessor {
       select: { name: true, logo: true },
     });
 
-    this.hasLogo = !!currentSource?.logo;
+    // If we have an existing name, assume it had a decent score (70 = parsed from title)
+    // This protects against replacing good names with worse ones during rescrape
+    // We'll only update if we find og:site_name (100) or application-name (90)
+    if (currentSource?.name) {
+      this.bestNameScore = 70;
+      console.log(`[Pipeline] Existing name found: "${currentSource.name}" (baseline score: ${this.bestNameScore})`);
+    }
 
-    console.log(`[Pipeline] Current metadata: name="${currentSource?.name || 'none'}", logo=${this.hasLogo ? 'yes' : 'no'}`);
+    console.log(`[Pipeline] Current metadata: name="${currentSource?.name || 'none'}", logo=${currentSource?.logo ? 'yes' : 'no'}`);
     console.log(`[Pipeline] Will check first ${this.MAX_PAGES_TO_CHECK_FOR_METADATA} pages for better metadata`);
 
     // Load robots.txt
@@ -464,22 +470,29 @@ export class PipelineProcessor {
         this.reportProgress();
 
         console.log(`[Pipeline] Fetching: ${task.url}`);
-        const response = await fetch(task.url, {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "DNT": "1",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Cache-Control": "max-age=0",
-          },
-        });
+
+        // Build headers - include Referer if this is a followed link (not initial page)
+        const headers: Record<string, string> = {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate, br",
+          "DNT": "1",
+          "Connection": "keep-alive",
+          "Upgrade-Insecure-Requests": "1",
+          "Sec-Fetch-Dest": "document",
+          "Sec-Fetch-Mode": "navigate",
+          "Sec-Fetch-Site": task.referer ? "same-origin" : "none",
+          "Cache-Control": "max-age=0",
+        };
+
+        // Add Referer header if we followed a link (makes requests look legitimate)
+        if (task.referer) {
+          headers["Referer"] = task.referer;
+        }
+
+        const response = await fetch(task.url, { headers });
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -605,34 +618,43 @@ export class PipelineProcessor {
             // Don't fail the entire task if name extraction fails
           }
 
-          // Extract favicon if we don't have one yet
-          if (!this.hasLogo) {
-            try {
-              console.log(`[Pipeline] Extracting favicon from ${task.url}`);
-              const faviconUrl = await extractAndVerifyFavicon(html, task.url);
+          // Always try to extract logo from first few pages (we may find a better one)
+          try {
+            console.log(`[Pipeline] Extracting logo from ${task.url}`);
+            const logoUrl = await extractAndVerifyFavicon(html, task.url);
 
-              if (faviconUrl) {
-                // Update source with favicon URL
+            if (logoUrl) {
+              // Check if this is different from the current logo
+              const currentSource = await prisma.source.findUnique({
+                where: { id: this.config.sourceId },
+                select: { logo: true },
+              });
+
+              if (!currentSource?.logo || currentSource.logo !== logoUrl) {
+                // Update source with new logo URL
                 await prisma.source.update({
                   where: { id: this.config.sourceId },
-                  data: { logo: faviconUrl },
+                  data: { logo: logoUrl },
                 });
 
-                this.hasLogo = true;
-                console.log(`[Pipeline] Saved favicon: ${faviconUrl}`);
+                console.log(`[Pipeline] ${currentSource?.logo ? 'Updated' : 'Saved'} logo: ${logoUrl}`);
 
                 // Report progress with updated logo
-                this.reportProgressWithMetadata({ logo: faviconUrl });
+                this.reportProgressWithMetadata({ logo: logoUrl });
               }
-            } catch (faviconError: any) {
-              console.error(`[Pipeline] Favicon extraction failed for ${task.url}:`, faviconError.message);
-              // Don't fail the entire task if favicon extraction fails
             }
+          } catch (logoError: any) {
+            console.error(`[Pipeline] Logo extraction failed for ${task.url}:`, logoError.message);
+            // Don't fail the entire task if logo extraction fails
           }
 
           // Log when we've checked enough pages
           if (this.pagesCheckedForMetadata >= this.MAX_PAGES_TO_CHECK_FOR_METADATA) {
-            console.log(`[Pipeline] ✓ Checked ${this.MAX_PAGES_TO_CHECK_FOR_METADATA} pages for metadata (best name score: ${this.bestNameScore}, logo: ${this.hasLogo ? 'yes' : 'no'})`);
+            const finalSource = await prisma.source.findUnique({
+              where: { id: this.config.sourceId },
+              select: { logo: true },
+            });
+            console.log(`[Pipeline] ✓ Checked ${this.MAX_PAGES_TO_CHECK_FOR_METADATA} pages for metadata (best name score: ${this.bestNameScore}, logo: ${finalSource?.logo ? 'yes' : 'no'})`);
           }
         }
 
@@ -640,11 +662,12 @@ export class PipelineProcessor {
         const links = this.extractLinks(html, task.url);
         console.log(`[Pipeline] Found ${links.length} links from ${task.url}`);
 
-        // Add discovered links to queue
+        // Add discovered links to queue with referer (current page)
         for (const link of links) {
           this.addTask({
             url: link,
             depth: task.depth + 1,
+            referer: task.url, // Pass current page as referer for followed links
             stage: "QUEUED",
           });
         }
@@ -851,19 +874,27 @@ export class PipelineProcessor {
    * Check if URL points to a non-content file that should be skipped
    */
   private isNonContentFile(url: string): boolean {
+    const lowerUrl = url.toLowerCase();
+
     // Skip sitemaps
-    if (url.includes('sitemap') && (url.endsWith('.xml') || url.endsWith('.xml.gz'))) {
+    if (lowerUrl.includes('sitemap') && (lowerUrl.endsWith('.xml') || lowerUrl.endsWith('.xml.gz'))) {
       return true;
     }
 
     // Skip RSS/Atom feeds
-    if (url.endsWith('.rss') || url.endsWith('.atom') || url.includes('/feeds/') || url.includes('/feed/')) {
+    if (lowerUrl.endsWith('.rss') || lowerUrl.endsWith('.atom') || lowerUrl.includes('/feeds/') || lowerUrl.includes('/feed/')) {
+      return true;
+    }
+
+    // Skip image files (discovered via logo extraction or linked from pages)
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico', '.bmp'];
+    if (imageExtensions.some(ext => lowerUrl.endsWith(ext))) {
       return true;
     }
 
     // Skip other non-HTML files
     const nonContentExtensions = ['.pdf', '.zip', '.tar', '.gz', '.json', '.csv', '.xlsx', '.doc', '.docx'];
-    if (nonContentExtensions.some(ext => url.endsWith(ext))) {
+    if (nonContentExtensions.some(ext => lowerUrl.endsWith(ext))) {
       return true;
     }
 
@@ -884,6 +915,12 @@ export class PipelineProcessor {
       try {
         // Resolve relative URLs
         const absolute = new URL(href, baseUrl).href;
+
+        // Skip image files and other non-content files
+        // These may appear as links but shouldn't be crawled
+        if (this.isNonContentFile(absolute)) {
+          return;
+        }
 
         // Normalize URL (same logic as addTask)
         const normalized = this.normalizeUrl(absolute);

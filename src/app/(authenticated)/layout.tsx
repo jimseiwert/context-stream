@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/header"
 import { cn } from "@/lib/utils"
 import { useSession } from "@/lib/auth/client"
 import { Skeleton } from "@/components/ui/skeleton"
+import { WorkspaceProvider } from "@/contexts/workspace-context"
 
 export default function DashboardLayout({
   children,
@@ -33,7 +34,8 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <WorkspaceProvider>
+      <div className="flex h-screen overflow-hidden">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -70,5 +72,6 @@ export default function DashboardLayout({
         </main>
       </div>
     </div>
+    </WorkspaceProvider>
   )
 }

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateSource } from "@/hooks/use-sources";
 import { useSession } from "@/lib/auth/client";
+import { useWorkspaceContext } from "@/contexts/workspace-context";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeft,
@@ -27,6 +28,7 @@ import {
   Globe,
   Loader2,
   Shield,
+  FolderKanban,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -39,6 +41,7 @@ const createSourceSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
   type: z.enum(["WEBSITE", "GITHUB"]),
   scope: z.enum(["GLOBAL", "WORKSPACE"]).optional(),
+  workspaceId: z.string().uuid("Invalid workspace").optional(),
   maxPages: z.number().min(1).max(10000).optional(),
   respectRobotsTxt: z.boolean().optional(),
   rescrapeSchedule: z.enum(["NEVER", "DAILY", "WEEKLY", "MONTHLY"]).optional(),
@@ -51,6 +54,7 @@ export default function NewSourcePage() {
   const createSource = useCreateSource();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { data: session } = useSession();
+  const { currentWorkspace, workspaces } = useWorkspaceContext();
 
   // Check if user is admin
   const isAdmin =
@@ -68,6 +72,7 @@ export default function NewSourcePage() {
     defaultValues: {
       type: "WEBSITE",
       scope: "WORKSPACE",
+      workspaceId: currentWorkspace?.id,
       maxPages: 1000,
       respectRobotsTxt: true,
       rescrapeSchedule: "NEVER",
@@ -76,16 +81,17 @@ export default function NewSourcePage() {
 
   const selectedType = watch("type");
   const selectedScope = watch("scope");
+  const selectedWorkspaceId = watch("workspaceId");
   const selectedRescrapeSchedule = watch("rescrapeSchedule");
 
   const onSubmit = async (data: CreateSourceFormData) => {
     setIsSubmitting(true);
     try {
-      // API will automatically use user's personal workspace (for WORKSPACE sources)
       const result = await createSource.mutateAsync({
         url: data.url,
         type: data.type,
         scope: data.scope, // Include scope if admin selected GLOBAL
+        workspaceId: data.workspaceId, // Include workspace ID
         rescrapeSchedule: data.rescrapeSchedule,
         config: {
           maxPages: data.maxPages,
@@ -252,6 +258,47 @@ export default function NewSourcePage() {
                   {selectedScope === "GLOBAL"
                     ? "🌐 Global sources are accessible to all users across all workspaces"
                     : "🏢 Workspace sources are only accessible to your workspace"}
+                </p>
+              </div>
+            )}
+
+            {/* Workspace Selector (Only for WORKSPACE scope) */}
+            {selectedScope === "WORKSPACE" && workspaces.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="workspaceId" className="flex items-center space-x-2">
+                  <FolderKanban className="h-4 w-4" />
+                  <span>
+                    Workspace <span className="text-destructive">*</span>
+                  </span>
+                </Label>
+                <Select
+                  value={selectedWorkspaceId}
+                  onValueChange={(value) =>
+                    setValue("workspaceId", value)
+                  }
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a workspace" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workspaces.map((workspace) => (
+                      <SelectItem key={workspace.id} value={workspace.id}>
+                        <div className="flex items-center space-x-2">
+                          <FolderKanban className="h-4 w-4" />
+                          <span>{workspace.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.workspaceId && (
+                  <p className="text-sm text-destructive">
+                    {errors.workspaceId.message}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Choose which workspace this source will be added to
                 </p>
               </div>
             )}

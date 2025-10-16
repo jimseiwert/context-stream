@@ -42,7 +42,7 @@ async function authenticateRequest(request: NextRequest) {
   // Hash the API key to match stored format
   const hashedKey = crypto.createHash('sha256').update(apiKey).digest('hex')
 
-  // Find valid API key with user and workspace
+  // Find valid API key with user and all workspaces
   const key = await prisma.apiKey.findUnique({
     where: {
       key: hashedKey,
@@ -54,7 +54,6 @@ async function authenticateRequest(request: NextRequest) {
             orderBy: {
               createdAt: 'asc',
             },
-            take: 1,
           },
         },
       },
@@ -79,17 +78,20 @@ async function authenticateRequest(request: NextRequest) {
   return {
     userId: key.userId,
     user: key.user,
-    workspaceId: key.user.workspaces[0]?.id,
+    workspaces: key.user.workspaces,
+    defaultWorkspaceId: key.user.workspaces[0]?.id,
   }
 }
 
 /**
  * Enhanced search documentation with framework detection, hybrid search, and reranking
+ * @param workspaceFilter - null/"personal" (default workspace), "global" (only global), "all" (all workspaces), or specific workspace slug
  */
 async function searchDocumentation(
   query: string,
   userId: string,
-  workspaceId?: string,
+  workspaces: Array<{ id: string; slug: string }>,
+  workspaceFilter?: string | null,
   sessionId?: string,
   limit = 10
 ) {
@@ -103,33 +105,65 @@ async function searchDocumentation(
     intent: parsed.intent,
   })
 
-  // 2. Get or create session for deduplication
+  // 2. Parse workspace filter to determine which workspaces to search
+  let workspaceIds: string[] = []
+  let includeGlobal = true
+
+  if (!workspaceFilter || workspaceFilter === 'personal') {
+    // Default: user's first/default workspace + global
+    workspaceIds = workspaces[0] ? [workspaces[0].id] : []
+  } else if (workspaceFilter === 'global') {
+    // Only global sources
+    workspaceIds = []
+    includeGlobal = true
+  } else if (workspaceFilter === 'all') {
+    // All user's workspaces + global
+    workspaceIds = workspaces.map(w => w.id)
+  } else {
+    // Specific workspace slug - find matching workspace
+    const workspace = workspaces.find(w => w.slug === workspaceFilter)
+    if (workspace) {
+      workspaceIds = [workspace.id]
+    } else {
+      // Invalid workspace - fall back to default
+      workspaceIds = workspaces[0] ? [workspaces[0].id] : []
+    }
+  }
+
+  // Use first workspace ID for session tracking
+  const sessionWorkspaceId = workspaceIds[0] || ''
+
+  // 3. Get or create session for deduplication
   const session = await sessionManager.getOrCreateSession(
     userId,
-    workspaceId || '',
+    sessionWorkspaceId,
     sessionId
   )
 
-  // 3. Build where clause for sources accessible to user
-  const sourceWhere: any = {}
+  // 4. Build where clause for sources accessible to user
+  const sourceWhere: any = { status: 'ACTIVE' }
 
-  if (workspaceId) {
+  if (workspaceFilter === 'global') {
+    // Only global sources
+    sourceWhere.scope = 'GLOBAL'
+  } else if (workspaceIds.length > 0) {
+    // Include global + specific workspace(s)
     sourceWhere.OR = [
-      { scope: 'GLOBAL', status: 'ACTIVE' },
+      { scope: 'GLOBAL' },
       {
         AND: [
-          { scope: 'WORKSPACE', status: 'ACTIVE' },
+          { scope: 'WORKSPACE' },
           {
             workspaceSources: {
-              some: { workspaceId },
+              some: { workspaceId: { in: workspaceIds } },
             },
           },
         ],
       },
     ]
   } else {
+    // No workspaces - only global
     sourceWhere.scope = 'GLOBAL'
-    sourceWhere.status = 'ACTIVE'
   }
 
   // Get accessible sources
@@ -150,13 +184,13 @@ async function searchDocumentation(
     }
   }
 
-  // 4. Get filtered & boosted sources
+  // 5. Get filtered & boosted sources
   const { ids: sourceIds, boostMap } = await getFilteredSources(
     parsed,
     baseSourceIds
   )
 
-  // 5. Check cache
+  // 6. Check cache
   const cacheKey = JSON.stringify({ query, sourceIds, sessionId: session.id })
   const cached = await searchCache.get(query, sourceIds, { sessionId: session.id })
 
@@ -173,7 +207,7 @@ async function searchDocumentation(
 
   console.log('[MCP] Cache MISS for query:', query)
 
-  // 6. Hybrid search (text + vector)
+  // 7. Hybrid search (text + vector)
   const excludePageIds = session.shownPageIds || []
   const searchResults = await hybridSearch(
     parsed,
@@ -192,26 +226,26 @@ async function searchDocumentation(
     }
   }
 
-  // 7. Apply source boosts
+  // 8. Apply source boosts
   searchResults.forEach((result) => {
     const boost = boostMap.get(result.source.id) || 1.0
     result.scores.combined *= boost
   })
 
-  // 8. Rerank results
+  // 9. Rerank results
   const reranked = await rerank(searchResults, parsed)
 
-  // 9. Optimize for tokens
+  // 10. Optimize for tokens
   const optimized = optimizeResults(reranked, parsed, {
     maxResults: limit,
     maxTokens: 5000,
     includeReasons: false, // Can enable for debugging
   })
 
-  // 10. Cache results
+  // 11. Cache results
   await searchCache.set(query, sourceIds, optimized, { sessionId: session.id })
 
-  // 11. Update session
+  // 12. Update session
   const shownPageIds = reranked.slice(0, limit).map((r) => r.pageId)
   await sessionManager.addShownPages(session.id, shownPageIds)
   await sessionManager.addQuery(session.id, query, optimized.length)
@@ -290,6 +324,10 @@ export async function POST(request: NextRequest) {
                       type: 'string',
                       description: 'Natural language search query describing what you want to implement or learn about (e.g., "how to add authentication", "cache with nextjs", "implement search feature")',
                     },
+                    workspace: {
+                      type: 'string',
+                      description: 'Optional workspace filter: null/"personal" (default workspace + global), "global" (only global sources), "all" (all workspaces + global), or specific workspace slug (e.g., "cooking")',
+                    },
                     session_id: {
                       type: 'string',
                       description: 'Optional session ID for deduplication across queries. Results shown in this session won\'t be repeated.',
@@ -313,6 +351,7 @@ export async function POST(request: NextRequest) {
 
         if (name === 'contextstream_search' || name === 'search') {
           const query = args?.query
+          const workspace = args?.workspace
           const sessionId = args?.session_id
           const limit = Math.min(args?.limit || 10, 20)
 
@@ -327,11 +366,12 @@ export async function POST(request: NextRequest) {
             })
           }
 
-          // Perform enhanced search
+          // Perform enhanced search with workspace filtering
           const searchResults = await searchDocumentation(
             query,
             auth.userId,
-            auth.workspaceId,
+            auth.workspaces,
+            workspace,
             sessionId,
             limit
           )
@@ -344,7 +384,7 @@ export async function POST(request: NextRequest) {
               topPageIds: searchResults.results.map((r: any) => r.url),
               sourceIds: [],
               latencyMs: searchResults.latencyMs,
-              workspaceId: auth.workspaceId,
+              workspaceId: auth.defaultWorkspaceId,
               userId: auth.userId,
             },
           })

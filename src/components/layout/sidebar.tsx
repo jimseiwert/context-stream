@@ -14,11 +14,24 @@ import {
   BarChart3,
   Shield,
   FileText,
-  Plus
+  Plus,
+  FolderKanban,
+  Check,
+  ChevronsUpDown
 } from "lucide-react"
+import { useWorkspaceContext } from "@/contexts/workspace-context"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Workspaces", href: "/workspaces", icon: FolderKanban },
   { name: "Sources", href: "/sources", icon: Database },
   { name: "Search", href: "/search", icon: Search },
   { name: "Settings", href: "/settings", icon: Settings },
@@ -38,6 +51,7 @@ interface SidebarProps {
 export function Sidebar({ userRole = "USER" }: SidebarProps) {
   const pathname = usePathname()
   const showAdminSection = userRole === "ADMIN" || userRole === "SUPER_ADMIN"
+  const { currentWorkspace, workspaces, switchWorkspace } = useWorkspaceContext()
 
   return (
     <div className="flex h-full w-64 flex-col border-r bg-background">
@@ -46,6 +60,48 @@ export function Sidebar({ userRole = "USER" }: SidebarProps) {
         <Link href="/dashboard">
           <Logo size={32} animated={true} />
         </Link>
+      </div>
+
+      {/* Workspace Switcher */}
+      <div className="border-b px-3 py-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full justify-between"
+            >
+              <span className="truncate">
+                {currentWorkspace?.name || "Select Workspace"}
+              </span>
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-56" align="start">
+            <DropdownMenuLabel>Switch Workspace</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {workspaces.map((workspace) => (
+              <DropdownMenuItem
+                key={workspace.id}
+                onClick={() => switchWorkspace(workspace.id)}
+                className="cursor-pointer"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="truncate">{workspace.name}</span>
+                  {currentWorkspace?.id === workspace.id && (
+                    <Check className="h-4 w-4 ml-2 flex-shrink-0" />
+                  )}
+                </div>
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/workspaces" className="cursor-pointer">
+                <FolderKanban className="mr-2 h-4 w-4" />
+                Manage Workspaces
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Navigation */}
