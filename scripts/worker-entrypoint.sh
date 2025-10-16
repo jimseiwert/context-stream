@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Force unbuffered output for all commands in this script
+exec 1>&1
+exec 2>&2
+
 echo "🚀 Starting ContextStream Worker..."
 
 # Determine which connection URL to use for migrations
@@ -67,4 +71,5 @@ export DATABASE_URL="$APP_URL"
 # Start the worker
 echo "✅ Starting worker process..."
 # Use stdbuf to force line-buffered output for Kubernetes logging
-exec stdbuf -oL -eL npm run worker
+# Run tsx directly (not through npm) to ensure it's PID 1 for proper Kubernetes log capture
+exec stdbuf -oL -eL npx tsx src/lib/jobs/worker.ts

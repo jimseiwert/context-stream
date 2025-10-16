@@ -58,12 +58,12 @@ services:
 
   # Next.js Application
   app:
-    image: ${DOCKER_REGISTRY:-jimseiwert}/context-stream:app-${VERSION:-latest}
+    image: jimseiwert/context-stream:app-latest
     container_name: contextstream-app
     restart: unless-stopped
     build:
       context: .
-      dockerfile: Dockerfile.app
+      dockerfile: docker/Dockerfile.app
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-contextstream}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-contextstream}}
@@ -100,7 +100,7 @@ services:
     restart: unless-stopped
     build:
       context: .
-      dockerfile: Dockerfile.worker
+      dockerfile: docker/Dockerfile.worker
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-contextstream}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-contextstream}}

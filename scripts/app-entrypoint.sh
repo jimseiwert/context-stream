@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Force unbuffered output for all commands in this script
+exec 1>&1
+exec 2>&2
+
 echo "🚀 Starting ContextStream App..."
 
 # Determine which connection URL to use for migrations

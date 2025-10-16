@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: contextstream
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: contextstream-config
+  namespace: contextstream
+data:
+  REDIS_URL: {{redis_url}}
+  BETTER_AUTH_SECRET: {{auth_secret}}
+  BETTER_AUTH_URL: {{auth_url}}
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: contextstream-secrets
+  namespace: contextstream
+data:
+  OPENAI_API_KEY: {{openai_api_key}}
+  DATABASE_URL: {{database_url}}
+  DATABASE_URL_DIRECT: {{database_url_direct}}
+  ENCRYPTION_KEY: {{encryption_key}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: contextstream
+  namespace: contextstream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: contextstream
+  template:
+    metadata:
+      labels:
+        app: contextstream
+    spec:
+      containers:
+      - name: contextstream
+        image: {{docker_registry}}/{{docker_repository}}:app-{{docker_tag}}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - secretRef:
+            name: contextstream-secrets
+        - configMapRef:
+            name: contextstream-config        
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: contextstream-worker
+  namespace: contextstream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: contextstream-worker
+  template:
+    metadata:
+      labels:
+        app: contextstream-worker
+    spec:
+      containers:
+      - name: contextstream-worker
+        image: j{{docker_registry}}/{{docker_repository}}:worker-{{docker_tag}}
+        imagePullPolicy: Always
+        envFrom:
+        - secretRef:
+            name: contextstream-secrets
+        - configMapRef:
+            name: contextstream-config            
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: contextstream
+  namespace: contextstream
+spec:
+  selector:
+    app: contextstream
+  ports:
+  - port: 3000
+    targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: contextstream-ingress
+  namespace: contextstream
+  annotations:
+    kubernetes.io/ingress.class: {{ingress_class}}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/client-max-body-size: "20m"
+    kubernetes.azure.com/tls-cert-keyvault-uri: {{tls_cert_keyvault_uri}}
+spec:
+  ingressClassName: {{ingress_class}}
+  tls:
+  - hosts:
+    - {{ingress_host}}
+    secretName: {{tls_secret_name}}
+  rules:
+  - host: {{ingress_host}}
+    http:
+      paths:
+      - path: /(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: contextstream
+            port:
+              number: 3000
