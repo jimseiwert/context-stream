@@ -19,6 +19,7 @@ import Queue from "bull";
 let scrapeQueue: Queue.Queue | null = null;
 let embedQueue: Queue.Queue | null = null;
 let updateQueue: Queue.Queue | null = null;
+let documentQueue: Queue.Queue | null = null;
 
 function getScrapeQueue(): Queue.Queue {
   if (!scrapeQueue) {
@@ -131,11 +132,49 @@ function getUpdateQueue(): Queue.Queue {
   return updateQueue;
 }
 
+function getDocumentQueue(): Queue.Queue {
+  if (!documentQueue) {
+    if (isBuildTime()) {
+      throw new Error("Cannot initialize queues during build time");
+    }
+
+    documentQueue = new Queue("document", {
+      createClient: (type) => {
+        switch (type) {
+          case "client":
+            console.log("[Document Queue] Using shared client");
+            return getRedisClient();
+          case "subscriber":
+            console.log("[Document Queue] Using shared subscriber");
+            return getRedisSubscriber();
+          case "bclient":
+            console.log("[Document Queue] Creating blocking client");
+            return createRedisBlockingClient("Document Blocking");
+          default:
+            console.log("[Document Queue] Creating default client");
+            return createRedisBlockingClient("Document Default");
+        }
+      },
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: {
+          type: "exponential",
+          delay: 2000,
+        },
+        removeOnComplete: 10,
+        removeOnFail: 50,
+      },
+    });
+  }
+  return documentQueue;
+}
+
 // Export getters instead of direct queue instances
 export {
   getEmbedQueue as embedQueue,
   getScrapeQueue as scrapeQueue,
   getUpdateQueue as updateQueue,
+  getDocumentQueue as documentQueue,
 };
 
 // Track if event handlers have been set up
@@ -148,6 +187,7 @@ function setupQueueEventHandlers() {
   const scrape = getScrapeQueue();
   const embed = getEmbedQueue();
   const update = getUpdateQueue();
+  const document = getDocumentQueue();
 
   scrape.on("error", (error) => {
     console.error("[Scrape Queue] Error:", error);
@@ -183,6 +223,18 @@ function setupQueueEventHandlers() {
 
   update.on("completed", (job) => {
     console.log(`[Update Queue] Job ${job.id} completed`);
+  });
+
+  document.on("error", (error) => {
+    console.error("[Document Queue] Error:", error);
+  });
+
+  document.on("failed", (job, error) => {
+    console.error(`[Document Queue] Job ${job.id} failed:`, error.message);
+  });
+
+  document.on("completed", (job) => {
+    console.log(`[Document Queue] Job ${job.id} completed`);
   });
 
   eventHandlersInitialized = true;
@@ -261,6 +313,51 @@ export async function addUpdateJob(sourceId: string) {
   return job.id;
 }
 
+// Helper function to add a document upload job
+export async function addDocumentJob(
+  sourceId: string,
+  filename: string,
+  filePath: string,
+  uploadedBy?: string,
+  override?: boolean
+) {
+  if (isBuildTime()) {
+    throw new Error("Cannot add jobs during build time");
+  }
+
+  console.log(`[Queue] Adding document upload job: ${filename}`);
+  if (override) {
+    console.log(`[Queue]    Override existing: true`);
+  }
+
+  setupQueueEventHandlers();
+  const queue = getDocumentQueue();
+  const job = await queue.add(
+    {
+      sourceId,
+      filename,
+      filePath,
+      uploadedBy,
+      override,
+    },
+    {
+      jobId: `document-${sourceId}-${Date.now()}`,
+    }
+  );
+
+  console.log(`[Queue] ✓ Document job added: ${job.id}`);
+  console.log(`[Queue]    Source ID: ${sourceId}`);
+  console.log(`[Queue]    Filename: ${filename}`);
+
+  // Check queue status
+  const jobCounts = await queue.getJobCounts();
+  console.log(
+    `[Queue]    Queue status: ${jobCounts.waiting} waiting, ${jobCounts.active} active`
+  );
+
+  return job.id;
+}
+
 // Graceful shutdown
 export async function shutdownQueues() {
   if (isBuildTime()) return;
@@ -272,6 +369,7 @@ export async function shutdownQueues() {
     scrapeQueue?.close(),
     embedQueue?.close(),
     updateQueue?.close(),
+    documentQueue?.close(),
   ]);
 
   // Import and call centralized Redis connection closer
@@ -288,19 +386,22 @@ export async function getQueueHealth() {
       scrape: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
       embed: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
       update: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
+      document: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
     };
   }
 
   setupQueueEventHandlers();
-  const [scrapeHealth, embedHealth, updateHealth] = await Promise.all([
+  const [scrapeHealth, embedHealth, updateHealth, documentHealth] = await Promise.all([
     getScrapeQueue().getJobCounts(),
     getEmbedQueue().getJobCounts(),
     getUpdateQueue().getJobCounts(),
+    getDocumentQueue().getJobCounts(),
   ]);
 
   return {
     scrape: scrapeHealth,
     embed: embedHealth,
     update: updateHealth,
+    document: documentHealth,
   };
 }

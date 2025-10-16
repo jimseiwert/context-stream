@@ -69,6 +69,7 @@ export async function GET(
         type: true,
         status: true,
         progress: true,
+        result: true,
         startedAt: true,
         completedAt: true,
         createdAt: true,
@@ -77,6 +78,7 @@ export async function GET(
 
     if (runningJob) {
       const progress = runningJob.progress as any;
+      const result = runningJob.result as any;
       return NextResponse.json({
         job: {
           id: runningJob.id,
@@ -95,6 +97,7 @@ export async function GET(
             failed: progress?.failed || 0,
             total: progress?.total || 0,
           },
+          result: result || null,
         },
       });
     }
@@ -111,6 +114,7 @@ export async function GET(
         type: true,
         status: true,
         progress: true,
+        result: true,
         startedAt: true,
         completedAt: true,
         createdAt: true,
@@ -123,6 +127,7 @@ export async function GET(
 
     // Format progress data
     const progress = job.progress as any;
+    const result = job.result as any;
 
     return NextResponse.json({
       job: {
@@ -142,6 +147,7 @@ export async function GET(
           failed: progress?.failed || 0,
           total: progress?.total || 0,
         },
+        result: result || null,
       },
     });
   } catch (error: any) {

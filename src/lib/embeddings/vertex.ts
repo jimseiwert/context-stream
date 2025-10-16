@@ -98,18 +98,18 @@ export class VertexAIEmbeddingProvider implements EmbeddingProvider {
     const allEmbeddings: number[][] = []
 
     for (const chunk of chunks) {
-      // Conservative character limit for Vertex AI
-      const MAX_CHARS = 3000
-      let content = chunk.content
+      // Validate chunk size - chunker should ensure chunks never exceed this limit
+      // If we hit this error, it indicates a bug in the chunker
+      const MAX_CHARS = 3000 // ~750 tokens (conservative estimate)
 
-      if (content.length > MAX_CHARS) {
-        console.log(
-          `[Vertex AI Embeddings] Chunk truncated from ${content.length} to ${MAX_CHARS} chars`
+      if (chunk.content.length > MAX_CHARS) {
+        throw new Error(
+          `Chunk size (${chunk.content.length} chars) exceeds maximum (${MAX_CHARS} chars). ` +
+          `This indicates a bug in the chunker. Please report this issue.`
         )
-        content = content.substring(0, MAX_CHARS)
       }
 
-      const embeddings = await this.generateEmbeddings([content])
+      const embeddings = await this.generateEmbeddings([chunk.content])
       allEmbeddings.push(...embeddings)
     }
 

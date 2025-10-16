@@ -144,6 +144,7 @@ model Workspace {
 enum SourceType {
   WEBSITE // Documentation websites
   GITHUB // GitHub repositories
+  DOCUMENT // Uploaded documents
 }
 
 enum SourceStatus {
@@ -196,6 +197,7 @@ model Source {
 
   // Scraped content (stored once, referenced many times)
   pages               Page[]
+  documents           Document[]
   jobs                Job[]
   batchEmbeddingJobs  BatchEmbeddingJob[] @relation("batch_embedding_jobs")
 
@@ -265,18 +267,70 @@ model Page {
 
 // Content chunks with embeddings (also shared)
 model Chunk {
-  id         String                       @id @default(uuid())
-  pageId     String
-  page       Page                         @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  chunkIndex Int
-  content    String                       @db.Text
-  embedding  Unsupported("vector(1536)")? // pgvector for OpenAI embeddings
-  metadata   Json? // Chunk-specific metadata
-  createdAt  DateTime                     @default(now())
+  id           String                       @id @default(uuid())
+  pageId       String?
+  page         Page?                        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  documentId   String?
+  document     Document?                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkIndex   Int
+  content      String                       @db.Text
+  embedding    Unsupported("vector(1536)")? // pgvector for OpenAI embeddings
+  metadata     Json? // Chunk-specific metadata
+  createdAt    DateTime                     @default(now())
 
   @@unique([pageId, chunkIndex])
+  @@unique([documentId, chunkIndex])
   @@index([pageId])
+  @@index([documentId])
   @@map("chunks")
+}
+
+// ========================================
+// Documents & File Uploads
+// ========================================
+
+enum DocumentType {
+  TXT
+  PDF
+  DOCX
+  MD
+  CSV
+  XLSX
+  HTML
+  RTF
+  ODT
+}
+
+// Uploaded documents for embedding
+model Document {
+  id          String       @id @default(uuid())
+  sourceId    String
+  source      Source       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  // Document metadata
+  filename    String
+  type        DocumentType
+  size        Int          // bytes
+  contentText String       @db.Text // Extracted text
+  metadata    Json?        // Pages, author, creation date, images extracted, etc.
+  checksum    String       // SHA-256 for deduplication
+
+  // Storage path (relative or S3 key)
+  storagePath String?
+
+  // Relationships
+  chunks      Chunk[]
+
+  // Timestamps
+  uploadedAt  DateTime     @default(now())
+  indexedAt   DateTime?
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([sourceId, checksum]) // Prevent duplicate uploads
+  @@index([sourceId])
+  @@index([type])
+  @@index([checksum])
+  @@map("documents")
 }
 
 // ========================================
@@ -287,6 +341,7 @@ enum JobType {
   SCRAPE // Initial scraping of source
   EMBED // Generate embeddings for pages
   UPDATE // Update existing source
+  DOCUMENT_UPLOAD // Document upload and indexing
 }
 
 enum JobStatus {
@@ -488,6 +543,13 @@ enum EmbeddingProvider {
   VERTEX_AI // Google Vertex AI
 }
 
+enum ImageProcessingMethod {
+  OCR // Tesseract.js - Local OCR (air-gap compatible)
+  OPENAI_VISION // OpenAI GPT-4 Vision
+  AZURE_VISION // Azure Computer Vision
+  SKIP // Skip image processing
+}
+
 // Embedding provider configuration
 model EmbeddingProviderConfig {
   id           String            @id @default(uuid())
@@ -515,4 +577,37 @@ model EmbeddingProviderConfig {
   @@index([isActive])
   @@index([provider])
   @@map("embedding_provider_configs")
+}
+
+// Image processing configuration for documents
+model ImageProcessingConfig {
+  id         String                @id @default(uuid())
+  method     ImageProcessingMethod @default(OCR)
+
+  // API configuration for vision services
+  apiKey     String?               @db.Text // For OpenAI/Azure vision
+  apiEndpoint String?              // For Azure custom endpoints
+
+  // OCR configuration
+  ocrLanguage String?              @default("eng") // Tesseract language (eng, fra, deu, etc.)
+  ocrQuality  Int?                 @default(2)     // 1=fast, 2=balanced, 3=best
+
+  // Vision model configuration
+  visionModel String?              // e.g., "gpt-4-vision-preview"
+  visionPrompt String?             @db.Text // Custom prompt for vision model
+
+  // Additional settings
+  maxImageSize Int?                @default(4194304) // 4MB default max image size
+  additionalConfig Json?           // Provider-specific settings
+
+  // Activation status
+  isActive   Boolean               @default(true) // Only one can be active at a time
+
+  // Timestamps
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@index([isActive])
+  @@index([method])
+  @@map("image_processing_configs")
 }

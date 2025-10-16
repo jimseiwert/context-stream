@@ -15,7 +15,8 @@ import {
   stopBatchPollingWorker,
 } from "./batch-polling-worker";
 import { processScrapeJob } from "./processors/scrape-job";
-import { addScrapeJob, embedQueue, scrapeQueue, updateQueue } from "./queue";
+import { processDocumentJob } from "./processors/document-job";
+import { addScrapeJob, embedQueue, scrapeQueue, updateQueue, documentQueue } from "./queue";
 import { startScheduler, stopScheduler } from "./scheduler";
 import { validateEncryptionKey, getActiveEmbeddingConfig } from "@/lib/embeddings/config";
 
@@ -228,6 +229,24 @@ async function initializeWorker() {
     });
     console.log("  ✓ Update queue processor ready");
 
+    // Process document upload jobs
+    console.log("Setting up document queue processor...");
+    documentQueue().process(async (job) => {
+      console.log(`\n[Document Queue] 🔄 Processing job ${job.id}`);
+      console.log(`[Document Queue]    Source ID: ${job.data.sourceId}`);
+      console.log(`[Document Queue]    Filename: ${job.data.filename}`);
+
+      try {
+        const result = await processDocumentJob(job);
+        console.log(`[Document Queue] ✓ Job ${job.id} completed successfully`);
+        return result;
+      } catch (error: any) {
+        console.error(`[Document Queue] ✗ Job ${job.id} failed:`, error.message);
+        throw error;
+      }
+    });
+    console.log("  ✓ Document queue processor ready");
+
     console.log("\n✓ All queue processors initialized");
     console.log("========================================\n");
 
@@ -255,16 +274,17 @@ async function clearQueueHistory() {
 
   try {
     // Get initial counts
-    const [scrapeCounts, embedCounts, updateCounts] = await Promise.all([
+    const [scrapeCounts, embedCounts, updateCounts, documentCounts] = await Promise.all([
       scrapeQueue().getJobCounts(),
       embedQueue().getJobCounts(),
       updateQueue().getJobCounts(),
+      documentQueue().getJobCounts(),
     ]);
 
     const totalCompleted =
-      scrapeCounts.completed + embedCounts.completed + updateCounts.completed;
+      scrapeCounts.completed + embedCounts.completed + updateCounts.completed + documentCounts.completed;
     const totalFailed =
-      scrapeCounts.failed + embedCounts.failed + updateCounts.failed;
+      scrapeCounts.failed + embedCounts.failed + updateCounts.failed + documentCounts.failed;
 
     console.log(
       `Found ${totalCompleted} completed jobs and ${totalFailed} failed jobs to clear`
@@ -280,6 +300,7 @@ async function clearQueueHistory() {
       scrapeQueue().clean(0, "completed"),
       embedQueue().clean(0, "completed"),
       updateQueue().clean(0, "completed"),
+      documentQueue().clean(0, "completed"),
     ]);
 
     // Clear failed jobs
@@ -287,6 +308,7 @@ async function clearQueueHistory() {
       scrapeQueue().clean(0, "failed"),
       embedQueue().clean(0, "failed"),
       updateQueue().clean(0, "failed"),
+      documentQueue().clean(0, "failed"),
     ]);
 
     console.log("✓ Queue history cleared successfully");
@@ -306,6 +328,7 @@ async function checkQueueStatus() {
     const scrapeJobCounts = await scrapeQueue().getJobCounts();
     const embedJobCounts = await embedQueue().getJobCounts();
     const updateJobCounts = await updateQueue().getJobCounts();
+    const documentJobCounts = await documentQueue().getJobCounts();
 
     console.log("Scrape Queue:");
     console.log(`  Waiting:   ${scrapeJobCounts.waiting}`);
@@ -328,10 +351,18 @@ async function checkQueueStatus() {
     console.log(`  Failed:    ${updateJobCounts.failed}`);
     console.log(`  Delayed:   ${updateJobCounts.delayed}`);
 
+    console.log("\nDocument Queue:");
+    console.log(`  Waiting:   ${documentJobCounts.waiting}`);
+    console.log(`  Active:    ${documentJobCounts.active}`);
+    console.log(`  Completed: ${documentJobCounts.completed}`);
+    console.log(`  Failed:    ${documentJobCounts.failed}`);
+    console.log(`  Delayed:   ${documentJobCounts.delayed}`);
+
     const totalWaiting =
       scrapeJobCounts.waiting +
       embedJobCounts.waiting +
-      updateJobCounts.waiting;
+      updateJobCounts.waiting +
+      documentJobCounts.waiting;
     if (totalWaiting > 0) {
       console.log(`\n⏳ ${totalWaiting} job(s) waiting to be processed`);
     } else {
@@ -490,6 +521,7 @@ process.on("SIGTERM", async () => {
       scrapeQueue().close(),
       embedQueue().close(),
       updateQueue().close(),
+      documentQueue().close(),
     ]);
     console.log("✓ Queues closed");
   } catch (error) {
@@ -518,6 +550,7 @@ process.on("SIGINT", async () => {
       scrapeQueue().close(),
       embedQueue().close(),
       updateQueue().close(),
+      documentQueue().close(),
     ]);
     console.log("✓ Queues closed");
   } catch (error) {

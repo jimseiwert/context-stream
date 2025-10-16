@@ -21,9 +21,10 @@ export const runtime = "nodejs";
 
 // Validation schemas
 const CreateSourceSchema = z.object({
-  url: z.string().url("Invalid URL format"),
+  url: z.string().url("Invalid URL format").optional(), // Optional for DOCUMENT sources
   workspaceId: z.string().uuid("Invalid workspace ID").optional(),
-  type: z.enum(["WEBSITE", "GITHUB"]),
+  type: z.enum(["WEBSITE", "GITHUB", "DOCUMENT"]),
+  name: z.string().min(1).max(255).optional(), // Name for DOCUMENT sources
   scope: z.enum(["GLOBAL", "WORKSPACE"]).optional(), // Only admins can set to GLOBAL
   rescrapeSchedule: z.enum(["NEVER", "DAILY", "WEEKLY", "MONTHLY"]).optional(),
   config: z
@@ -121,6 +122,7 @@ export async function GET(request: NextRequest) {
           _count: {
             select: {
               pages: true,
+              documents: true,
               workspaceSources: true,
             },
           },
@@ -137,7 +139,8 @@ export async function GET(request: NextRequest) {
       // Format sources to match frontend expectations
       const formattedSources = sources.map((source) => ({
         ...source,
-        pageCount: source._count.pages,
+        // For DOCUMENT sources, use documents count; for others use pages count
+        pageCount: source.type === 'DOCUMENT' ? source._count.documents : source._count.pages,
         workspaceCount: source._count.workspaceSources,
         config: source.config || undefined,
       }));
@@ -163,6 +166,7 @@ export async function GET(request: NextRequest) {
         _count: {
           select: {
             pages: true,
+            documents: true,
             workspaceSources: true,
           },
         },
@@ -179,7 +183,8 @@ export async function GET(request: NextRequest) {
     // Format sources to match frontend expectations
     const formattedSources = sources.map((source) => ({
       ...source,
-      pageCount: source._count.pages,
+      // For DOCUMENT sources, use documents count; for others use pages count
+      pageCount: source.type === 'DOCUMENT' ? source._count.documents : source._count.pages,
       config: source.config || undefined,
     }));
 
@@ -283,6 +288,63 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         );
       }
+    }
+
+    // Handle DOCUMENT sources differently (no URL, no duplicate checking)
+    if (data.type === "DOCUMENT") {
+      // DOCUMENT sources don't need URL validation or duplicate checking
+      // Generate a unique URL identifier for document sources
+      const documentUrl = `document://${data.name || 'untitled'}-${Date.now()}`;
+
+      const newDocumentSource = await prisma.source.create({
+        data: {
+          url: documentUrl,
+          domain: 'documents',
+          name: data.name || 'Document Collection',
+          scope: targetScope,
+          type: 'DOCUMENT',
+          status: 'ACTIVE', // Documents start as ACTIVE (no scraping needed)
+          config: data.config,
+          rescrapeSchedule: 'NEVER', // Documents don't rescrape
+          createdById: session.user.id,
+          // Only create workspace link for WORKSPACE sources
+          ...(targetScope === "WORKSPACE" && workspaceId
+            ? {
+                workspaceSources: {
+                  create: {
+                    workspaceId,
+                    addedBy: session.user.id,
+                  },
+                },
+              }
+            : {}),
+        },
+        include: {
+          _count: {
+            select: {
+              pages: true,
+              documents: true,
+              workspaceSources: true,
+            },
+          },
+        },
+      });
+
+      return NextResponse.json(
+        {
+          source: newDocumentSource,
+          message: 'Document source created. You can now upload documents to this source.',
+        },
+        { status: 201 }
+      );
+    }
+
+    // For WEBSITE and GITHUB sources, URL is required
+    if (!data.url) {
+      return NextResponse.json(
+        { error: 'URL is required for WEBSITE and GITHUB sources' },
+        { status: 400 }
+      );
     }
 
     // Normalize URL (remove trailing slash, etc.)

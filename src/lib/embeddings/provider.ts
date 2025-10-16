@@ -38,3 +38,13 @@ export async function getEmbeddingProvider(): Promise<EmbeddingProvider> {
       throw new Error(`Unsupported embedding provider: ${config.provider}`)
   }
 }
+
+/**
+ * Generate embedding for a single text
+ * This is a convenience wrapper around generateEmbeddings for single text inputs
+ */
+export async function generateEmbedding(text: string): Promise<number[]> {
+  const provider = await getEmbeddingProvider()
+  const embeddings = await provider.generateEmbeddings([text])
+  return embeddings[0]
+}

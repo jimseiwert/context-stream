@@ -9,7 +9,7 @@ export interface Source {
   url: string;
   domain: string;
   logo?: string | null;
-  type: "WEBSITE" | "GITHUB";
+  type: "WEBSITE" | "GITHUB" | "DOCUMENT";
   scope: "GLOBAL" | "WORKSPACE";
   status: "PENDING" | "INDEXING" | "ACTIVE" | "ERROR" | "PAUSED";
   config?: {
@@ -66,7 +66,7 @@ export interface Source {
 
 export interface CreateSourceInput {
   url: string;
-  type: "WEBSITE" | "GITHUB";
+  type: "WEBSITE" | "GITHUB" | "DOCUMENT";
   scope?: "GLOBAL" | "WORKSPACE"; // Optional - defaults to WORKSPACE
   workspaceId?: string; // Optional - API will use user's workspace if not provided
   rescrapeSchedule?: "NEVER" | "DAILY" | "WEEKLY" | "MONTHLY";

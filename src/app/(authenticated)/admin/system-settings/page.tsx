@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { EmbeddingConfigForm } from "@/components/admin/embedding-config-form";
 import { EmbeddingConfigList } from "@/components/admin/embedding-config-list";
+import { ImageProcessingConfig } from "@/components/admin/image-processing-config";
 import { Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -66,13 +67,10 @@ export default function SystemSettingsPage() {
       {/* Configurations List */}
       {!showForm && <EmbeddingConfigList onEdit={handleEdit} />}
 
-      {/* Additional System Settings (Future) */}
+      {/* Image Processing Configuration */}
       {!showForm && (
         <div className="border-t pt-6">
-          <h2 className="text-xl font-semibold mb-4">Additional Settings</h2>
-          <p className="text-muted-foreground">
-            More system settings will be available here in future updates.
-          </p>
+          <ImageProcessingConfig />
         </div>
       )}
     </div>

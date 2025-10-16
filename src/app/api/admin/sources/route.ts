@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
         _count: {
           select: {
             pages: true,
+            documents: true,
             workspaceSources: true,
           },
         },
@@ -72,7 +73,8 @@ export async function GET(request: NextRequest) {
     // Format sources to match frontend expectations
     const formattedSources = sources.map((source) => ({
       ...source,
-      pageCount: source._count.pages,
+      // For DOCUMENT sources, use documents count; for others use pages count
+      pageCount: source.type === 'DOCUMENT' ? source._count.documents : source._count.pages,
       workspaceCount: source._count.workspaceSources,
       config: source.config || undefined,
     }));

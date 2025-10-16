@@ -422,7 +422,10 @@ export default function AdminSourcesPage() {
                       </a>
                       <span className="flex items-center space-x-1">
                         <TrendingUp className="h-3 w-3" />
-                        <span>{source.pageCount.toLocaleString()} pages</span>
+                        <span>
+                          {source.pageCount.toLocaleString()}{' '}
+                          {source.type === 'DOCUMENT' ? 'documents' : 'pages'}
+                        </span>
                       </span>
                     </div>
                     </div>

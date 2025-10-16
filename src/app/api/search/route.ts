@@ -287,6 +287,7 @@ export async function POST(request: NextRequest) {
           scope: r.sourceScope,
         },
         score: r.relevanceScore,
+        scoreBreakdown: r.scoreBreakdown,
       })),
       total: optimized.length,
       latencyMs: Date.now() - startTime,

@@ -59,18 +59,18 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     const allEmbeddings: number[][] = []
 
     for (const chunk of chunks) {
-      // Hard character limit: ~3000 chars = ~750 tokens (conservative estimate)
-      // This ensures we stay well under the 8192 token limit even with worst-case tokenization
-      const MAX_CHARS = 3000
-      let content = chunk.content
+      // Validate chunk size - chunker should ensure chunks never exceed this limit
+      // If we hit this error, it indicates a bug in the chunker
+      const MAX_CHARS = 3000 // ~750 tokens (conservative estimate)
 
-      if (content.length > MAX_CHARS) {
-        // NOTE: This is expected behavior for large chunks, not an error
-        console.log(`[Embeddings] Chunk truncated from ${content.length} to ${MAX_CHARS} chars (within API limits)`)
-        content = content.substring(0, MAX_CHARS)
+      if (chunk.content.length > MAX_CHARS) {
+        throw new Error(
+          `Chunk size (${chunk.content.length} chars) exceeds maximum (${MAX_CHARS} chars). ` +
+          `This indicates a bug in the chunker. Please report this issue.`
+        )
       }
 
-      const embeddings = await this.generateEmbeddings([content])
+      const embeddings = await this.generateEmbeddings([chunk.content])
       allEmbeddings.push(...embeddings)
     }
 

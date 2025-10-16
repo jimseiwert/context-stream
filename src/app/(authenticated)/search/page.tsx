@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSearch } from "@/hooks/use-search";
 import {
+  ChevronDown,
+  ChevronRight,
   Database,
   ExternalLink,
   FileText,
@@ -30,6 +32,7 @@ export default function SearchPage() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialQuery);
+  const [expandedScores, setExpandedScores] = useState<Set<string>>(new Set());
 
   const {
     results,
@@ -40,6 +43,18 @@ export default function SearchPage() {
     updateFilters,
     clearFilters,
   } = useSearch();
+
+  const toggleScoreBreakdown = (resultId: string) => {
+    setExpandedScores((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(resultId)) {
+        newSet.delete(resultId);
+      } else {
+        newSet.add(resultId);
+      }
+      return newSet;
+    });
+  };
 
   // Auto-search when page loads with query param
   useEffect(() => {
@@ -175,9 +190,9 @@ export default function SearchPage() {
                           {result.url}
                         </CardDescription>
                       </div>
-                      {result.score && (
+                      {result.score !== undefined && (
                         <Badge variant="outline" className="ml-2">
-                          {Math.round(result.score * 100)}% match
+                          {Math.round(result.score)}% match
                         </Badge>
                       )}
                     </div>
@@ -202,6 +217,99 @@ export default function SearchPage() {
                         <span>{result.source.name}</span>
                       </button>
                     </div>
+
+                    {/* Score Breakdown */}
+                    {result.scoreBreakdown && (
+                      <div className="mt-4">
+                        <button
+                          onClick={() => toggleScoreBreakdown(result.id)}
+                          className="flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          {expandedScores.has(result.id) ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3" />
+                          )}
+                          <span>
+                            {expandedScores.has(result.id)
+                              ? "Hide score details"
+                              : "Show score details"}
+                          </span>
+                        </button>
+
+                        {expandedScores.has(result.id) && (
+                          <div className="mt-3 text-xs bg-muted/50 rounded-md p-3 space-y-2">
+                            <div className="font-medium mb-2">Score Breakdown</div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-muted-foreground">Text Match:</span>
+                                <span className="ml-2 font-mono">
+                                  {result.scoreBreakdown.textScore.toFixed(4)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Vector Match:</span>
+                                <span className="ml-2 font-mono">
+                                  {result.scoreBreakdown.vectorScore.toFixed(4)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Base Score:</span>
+                                <span className="ml-2 font-mono">
+                                  {result.scoreBreakdown.baseScore.toFixed(4)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Reranked:</span>
+                                <span className="ml-2 font-mono">
+                                  {result.scoreBreakdown.rerankedScore.toFixed(4)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 pt-3 border-t border-border">
+                              <div className="font-medium mb-2">Reranking Signals</div>
+                              <div className="grid grid-cols-2 gap-2">
+                                {Object.entries(result.scoreBreakdown.signals).map(
+                                  ([key, value]) => (
+                                    <div key={key}>
+                                      <span className="text-muted-foreground capitalize">
+                                        {key.replace(/([A-Z])/g, " $1").trim()}:
+                                      </span>
+                                      <span
+                                        className={`ml-2 font-mono ${
+                                          value > 1.0
+                                            ? "text-green-600 dark:text-green-400"
+                                            : ""
+                                        }`}
+                                      >
+                                        {value.toFixed(2)}x
+                                      </span>
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="mt-3 pt-3 border-t border-border">
+                              <div>
+                                <span className="text-muted-foreground">Total Multiplier:</span>
+                                <span className="ml-2 font-mono font-medium">
+                                  {result.scoreBreakdown.totalMultiplier.toFixed(4)}x
+                                </span>
+                              </div>
+                              <div className="mt-1">
+                                <span className="text-muted-foreground">Final Score:</span>
+                                <span className="ml-2 font-mono font-medium">
+                                  {Math.round(result.scoreBreakdown.normalizedScore)}%
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}

@@ -389,7 +389,9 @@ export default function SourcesPage() {
               <CardContent>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Pages</span>
+                    <span className="text-sm text-muted-foreground">
+                      {source.type === 'DOCUMENT' ? 'Documents' : 'Pages'}
+                    </span>
                     <span className="text-sm font-semibold">
                       {source.pageCount.toLocaleString()}
                     </span>
@@ -521,7 +523,8 @@ export default function SourcesPage() {
                           {source.name || source.domain}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {source.pageCount.toLocaleString()} pages
+                          {source.pageCount.toLocaleString()}{' '}
+                          {source.type === 'DOCUMENT' ? 'documents' : 'pages'}
                         </p>
                       </div>
                       <Button

@@ -16,6 +16,22 @@ export interface OptimizedResult {
   sourceScope: 'GLOBAL' | 'WORKSPACE'
   relevanceScore: number
   reasons?: string[]
+  scoreBreakdown?: {
+    textScore: number
+    vectorScore: number
+    baseScore: number
+    rerankedScore: number
+    signals: {
+      frameworkMatch: number
+      proximityMatch: number
+      titleMatch: number
+      codeQuality: number
+      recency: number
+      userFeedback: number
+    }
+    totalMultiplier: number
+    normalizedScore: number
+  }
 }
 
 export interface OptimizationConfig {
@@ -67,6 +83,12 @@ export function optimizeResults(
     Math.min(targetLength, availableCharsForSnippets / topResults.length)
   )
 
+  // Normalize scores to 0-100 scale based on top score
+  const topScore = topResults.length > 0 ? topResults[0].scores.reranked : 1
+  const minScore = topResults.length > 0
+    ? Math.min(...topResults.map(r => r.scores.reranked))
+    : 0
+
   return topResults.map((result) => {
     // Generate optimized snippet
     const snippet = generateSnippet(
@@ -74,6 +96,27 @@ export function optimizeResults(
       parsed,
       charsPerSnippet
     )
+
+    // Normalize score to 0-100 scale
+    // Top result gets 100%, others scaled proportionally
+    let normalizedScore = 0
+    if (topScore > 0) {
+      const range = topScore - minScore
+      if (range > 0) {
+        // Normal case: scale based on range
+        normalizedScore = Math.round(((result.scores.reranked - minScore) / range) * 100)
+      } else {
+        // All scores are identical, give everyone 100%
+        normalizedScore = 100
+      }
+    }
+    // Clamp to 0-100 range to prevent any edge cases
+    normalizedScore = Math.min(100, Math.max(0, normalizedScore))
+
+    // Calculate total multiplier from all signals
+    const totalMultiplier = result.signals
+      ? Object.values(result.signals).reduce((acc, signal) => acc * signal, 1.0)
+      : 1.0
 
     const optimized: OptimizedResult = {
       title: result.title,
@@ -83,7 +126,23 @@ export function optimizeResults(
       sourceUrl: `https://${result.source.domain}`,
       sourceId: result.source.id,
       sourceScope: result.source.scope,
-      relevanceScore: Math.round(result.scores.reranked * 100) / 100,
+      relevanceScore: normalizedScore,
+      scoreBreakdown: {
+        textScore: result.scores.text || 0,
+        vectorScore: result.scores.vector || 0,
+        baseScore: result.scores.combined,
+        rerankedScore: result.scores.reranked,
+        signals: result.signals || {
+          frameworkMatch: 1.0,
+          proximityMatch: 1.0,
+          titleMatch: 1.0,
+          codeQuality: 1.0,
+          recency: 1.0,
+          userFeedback: 1.0,
+        },
+        totalMultiplier,
+        normalizedScore,
+      },
     }
 
     // Optionally include ranking reasons

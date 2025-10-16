@@ -6,6 +6,10 @@ export interface ChunkConfig {
   overlap: number
 }
 
+// Hard maximum chunk size in characters (stay well under API limits)
+// 2800 chars ≈ 700 tokens, safe for most embedding APIs (usually 8192 token limit)
+const HARD_MAX_CHARS = 2800
+
 export interface Chunk {
   content: string
   startIndex: number
@@ -15,11 +19,12 @@ export interface Chunk {
 /**
  * Chunk text into smaller pieces
  * Uses a simple token approximation (1 token ≈ 4 characters)
+ * Enforces a hard maximum chunk size to prevent truncation
  */
 export function chunkText(text: string, config: ChunkConfig): Chunk[] {
   const { maxTokens, overlap } = config
-  const maxChars = maxTokens * 4 // Approximate characters per token
-  const overlapChars = overlap * 4
+  const maxChars = Math.min(maxTokens * 4, HARD_MAX_CHARS) // Use smaller of config or hard limit
+  const overlapChars = Math.min(overlap * 4, Math.floor(maxChars / 4)) // Ensure overlap isn't too large
 
   const chunks: Chunk[] = []
 
@@ -37,8 +42,36 @@ export function chunkText(text: string, config: ChunkConfig): Chunk[] {
   for (let i = 0; i < paragraphs.length; i++) {
     const paragraph = paragraphs[i]
 
+    // If the paragraph itself is too large, split it with sliding window
+    if (paragraph.length > maxChars) {
+      // Save current chunk if not empty
+      if (currentChunk.trim()) {
+        chunks.push({
+          content: currentChunk.trim(),
+          startIndex: currentStart,
+        })
+        currentChunk = ''
+      }
+
+      // Split the large paragraph into multiple chunks
+      const paragraphStart = text.indexOf(paragraph, currentStart)
+      const paragraphChunks = slidingWindowChunk(paragraph, maxChars, overlapChars)
+
+      // Add all chunks from this paragraph
+      paragraphChunks.forEach((chunk) => {
+        chunks.push({
+          content: chunk.content,
+          startIndex: paragraphStart + chunk.startIndex,
+        })
+      })
+
+      // Reset for next paragraph
+      currentStart = paragraphStart + paragraph.length
+      continue
+    }
+
     // If adding this paragraph would exceed max length
-    if (currentChunk.length + paragraph.length > maxChars) {
+    if (currentChunk.length + paragraph.length + 2 > maxChars) { // +2 for \n\n
       // Save current chunk if not empty
       if (currentChunk.trim()) {
         chunks.push({
@@ -49,7 +82,7 @@ export function chunkText(text: string, config: ChunkConfig): Chunk[] {
 
       // Start new chunk with overlap
       const overlapText = currentChunk.slice(-overlapChars)
-      currentChunk = overlapText + paragraph
+      currentChunk = overlapText + (overlapText ? '\n\n' : '') + paragraph
       currentStart = text.indexOf(paragraph, currentStart)
     } else {
       // Add paragraph to current chunk
@@ -98,9 +131,13 @@ function slidingWindowChunk(
       startIndex: start,
     })
 
+    // If we've reached the end, break
+    if (end >= text.length) break
+
     // Move start position with overlap
-    start = end - overlapChars
-    if (start <= 0) start = end
+    const nextStart = end - overlapChars
+    // Ensure we always make progress
+    start = nextStart > start ? nextStart : end
   }
 
   return chunks

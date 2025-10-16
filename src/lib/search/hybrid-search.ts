@@ -140,22 +140,29 @@ export class HybridSearch {
   }
 
   /**
-   * Full-text search using PostgreSQL ts_vector
+   * Full-text search using PostgreSQL ts_vector on chunks
+   * Uses chunks to avoid tsvector size limits
    */
   private async fullTextSearch(query: string, sourceIds: string[]) {
-    return prisma.$queryRaw<Array<{ id: string; rank: number }>>`
-      SELECT
-        p.id,
-        ts_rank(
-          to_tsvector('english', p."contentText"),
+    // Search chunks (works for both pages and documents)
+    const chunkResults = await prisma.$queryRaw<Array<{ id: string; rank: number }>>`
+      SELECT DISTINCT
+        COALESCE(c."pageId", d.id) as id,
+        MAX(ts_rank(
+          to_tsvector('english', c.content),
           plainto_tsquery('english', ${query})
-        ) as rank
-      FROM pages p
-      WHERE p."sourceId"::text = ANY(${sourceIds})
-        AND to_tsvector('english', p."contentText") @@ plainto_tsquery('english', ${query})
+        )) as rank
+      FROM chunks c
+      LEFT JOIN pages p ON c."pageId" = p.id
+      LEFT JOIN documents d ON c."documentId" = d.id
+      WHERE (p."sourceId"::text = ANY(${sourceIds}) OR d."sourceId"::text = ANY(${sourceIds}))
+        AND to_tsvector('english', c.content) @@ plainto_tsquery('english', ${query})
+      GROUP BY COALESCE(c."pageId", d.id)
       ORDER BY rank DESC
       LIMIT 100
     `;
+
+    return chunkResults;
   }
 
   /**
@@ -174,16 +181,19 @@ export class HybridSearch {
 
       const embeddingStr = `[${queryVector.join(",")}]`;
 
-      // Perform vector search
+      // Perform vector search on chunks (handles both pages and documents)
       return prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
-        SELECT
-          c."pageId" as id,
-          1 - (c.embedding <=> ${embeddingStr}::vector) as similarity
+        SELECT DISTINCT
+          COALESCE(c."pageId", d.id) as id,
+          MIN(c.embedding <=> ${embeddingStr}::vector) as distance,
+          1 - MIN(c.embedding <=> ${embeddingStr}::vector) as similarity
         FROM chunks c
-        INNER JOIN pages p ON c."pageId" = p.id
-        WHERE p."sourceId"::text = ANY(${sourceIds})
+        LEFT JOIN pages p ON c."pageId" = p.id
+        LEFT JOIN documents d ON c."documentId" = d.id
+        WHERE (p."sourceId"::text = ANY(${sourceIds}) OR d."sourceId"::text = ANY(${sourceIds}))
           AND c.embedding IS NOT NULL
-        ORDER BY c.embedding <=> ${embeddingStr}::vector
+        GROUP BY COALESCE(c."pageId", d.id)
+        ORDER BY distance
         LIMIT 100
       `;
     } catch (error) {
@@ -352,33 +362,39 @@ export async function hybridSearch(
   // Build search query from keywords
   const searchQuery = parsed.keywords.join(" ");
 
-  // 1. Full-text search (BM25)
+  // 1. Full-text search (BM25) using chunks to avoid tsvector size limits
   const ftsResults =
     excludePageIds.length > 0
       ? await prisma.$queryRaw<Array<{ id: string; rank: number }>>`
-        SELECT
-          p.id,
-          ts_rank(
-            to_tsvector('english', p."contentText"),
+        SELECT DISTINCT
+          COALESCE(c."pageId", d.id) as id,
+          MAX(ts_rank(
+            to_tsvector('english', c.content),
             plainto_tsquery('english', ${searchQuery})
-          ) as rank
-        FROM pages p
-        WHERE p."sourceId"::text = ANY(${sourceIds})
-          AND p.id::text != ALL(${excludePageIds})
-          AND to_tsvector('english', p."contentText") @@ plainto_tsquery('english', ${searchQuery})
+          )) as rank
+        FROM chunks c
+        LEFT JOIN pages p ON c."pageId" = p.id
+        LEFT JOIN documents d ON c."documentId" = d.id
+        WHERE (p."sourceId"::text = ANY(${sourceIds}) OR d."sourceId"::text = ANY(${sourceIds}))
+          AND COALESCE(c."pageId", d.id)::text != ALL(${excludePageIds})
+          AND to_tsvector('english', c.content) @@ plainto_tsquery('english', ${searchQuery})
+        GROUP BY COALESCE(c."pageId", d.id)
         ORDER BY rank DESC
         LIMIT ${limit}
       `
       : await prisma.$queryRaw<Array<{ id: string; rank: number }>>`
-        SELECT
-          p.id,
-          ts_rank(
-            to_tsvector('english', p."contentText"),
+        SELECT DISTINCT
+          COALESCE(c."pageId", d.id) as id,
+          MAX(ts_rank(
+            to_tsvector('english', c.content),
             plainto_tsquery('english', ${searchQuery})
-          ) as rank
-        FROM pages p
-        WHERE p."sourceId"::text = ANY(${sourceIds})
-          AND to_tsvector('english', p."contentText") @@ plainto_tsquery('english', ${searchQuery})
+          )) as rank
+        FROM chunks c
+        LEFT JOIN pages p ON c."pageId" = p.id
+        LEFT JOIN documents d ON c."documentId" = d.id
+        WHERE (p."sourceId"::text = ANY(${sourceIds}) OR d."sourceId"::text = ANY(${sourceIds}))
+          AND to_tsvector('english', c.content) @@ plainto_tsquery('english', ${searchQuery})
+        GROUP BY COALESCE(c."pageId", d.id)
         ORDER BY rank DESC
         LIMIT ${limit}
       `;
@@ -395,26 +411,32 @@ export async function hybridSearch(
     vectorResults =
       excludePageIds.length > 0
         ? await prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
-          SELECT
-            c."pageId" as id,
-            1 - (c.embedding <=> ${embeddingStr}::vector) as similarity
+          SELECT DISTINCT
+            COALESCE(c."pageId", d.id) as id,
+            MIN(c.embedding <=> ${embeddingStr}::vector) as distance,
+            1 - MIN(c.embedding <=> ${embeddingStr}::vector) as similarity
           FROM chunks c
-          INNER JOIN pages p ON c."pageId" = p.id
-          WHERE p."sourceId"::text = ANY(${sourceIds})
-            AND c."pageId"::text != ALL(${excludePageIds})
+          LEFT JOIN pages p ON c."pageId" = p.id
+          LEFT JOIN documents d ON c."documentId" = d.id
+          WHERE (p."sourceId"::text = ANY(${sourceIds}) OR d."sourceId"::text = ANY(${sourceIds}))
+            AND COALESCE(c."pageId", d.id)::text != ALL(${excludePageIds})
             AND c.embedding IS NOT NULL
-          ORDER BY c.embedding <=> ${embeddingStr}::vector
+          GROUP BY COALESCE(c."pageId", d.id)
+          ORDER BY distance
           LIMIT ${limit}
         `
         : await prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
-          SELECT
-            c."pageId" as id,
-            1 - (c.embedding <=> ${embeddingStr}::vector) as similarity
+          SELECT DISTINCT
+            COALESCE(c."pageId", d.id) as id,
+            MIN(c.embedding <=> ${embeddingStr}::vector) as distance,
+            1 - MIN(c.embedding <=> ${embeddingStr}::vector) as similarity
           FROM chunks c
-          INNER JOIN pages p ON c."pageId" = p.id
-          WHERE p."sourceId"::text = ANY(${sourceIds})
+          LEFT JOIN pages p ON c."pageId" = p.id
+          LEFT JOIN documents d ON c."documentId" = d.id
+          WHERE (p."sourceId"::text = ANY(${sourceIds}) OR d."sourceId"::text = ANY(${sourceIds}))
             AND c.embedding IS NOT NULL
-          ORDER BY c.embedding <=> ${embeddingStr}::vector
+          GROUP BY COALESCE(c."pageId", d.id)
+          ORDER BY distance
           LIMIT ${limit}
         `;
   } catch (error) {
@@ -452,17 +474,23 @@ export async function hybridSearch(
     }
   });
 
-  // 4. Get top page IDs
-  const topPageIds = Array.from(scores.entries())
+  // 4. Filter results requiring minimum text match
+  // Industry best practice: Require at least some text match to prevent false positives from vector-only results
+  // Minimum text score prevents semantic similarity from showing irrelevant results
+  const MIN_TEXT_SCORE = 0.001; // Very low threshold - just needs ANY text match
+
+  const filteredScores = Array.from(scores.entries())
+    .filter(([_, score]) => score.text >= MIN_TEXT_SCORE) // Require at least minimal text match
     .sort((a, b) => b[1].combined - a[1].combined)
-    .slice(0, limit)
-    .map(([id]) => id);
+    .slice(0, limit);
+
+  const topPageIds = filteredScores.map(([id]) => id);
 
   if (topPageIds.length === 0) {
     return [];
   }
 
-  // 5. Fetch page details
+  // 5. Fetch page AND document details
   const pages = await prisma.page.findMany({
     where: { id: { in: topPageIds } },
     include: {
@@ -479,10 +507,29 @@ export async function hybridSearch(
     },
   });
 
-  // 6. Format as RerankableResult
-  const results: RerankableResult[] = pages.map((page) => {
+  const documents = await prisma.document.findMany({
+    where: { id: { in: topPageIds } },
+    include: {
+      source: {
+        select: {
+          id: true,
+          name: true,
+          domain: true,
+          url: true,
+          scope: true,
+          tags: true,
+        },
+      },
+    },
+  });
+
+  // 6. Format as RerankableResult (combine pages and documents)
+  const results: RerankableResult[] = [];
+
+  // Add page results
+  pages.forEach((page) => {
     const pageScores = scores.get(page.id)!;
-    return {
+    results.push({
       pageId: page.id,
       title: page.title || page.url,
       url: page.url,
@@ -499,7 +546,30 @@ export async function hybridSearch(
         text: pageScores.text,
         vector: pageScores.vector,
       },
-    };
+    });
+  });
+
+  // Add document results
+  documents.forEach((doc) => {
+    const docScores = scores.get(doc.id)!;
+    results.push({
+      pageId: doc.id,
+      title: doc.filename,
+      url: `${doc.source.url}/documents/${doc.id}`, // Generate a URL for the document
+      content: doc.content || "",
+      source: {
+        id: doc.source.id,
+        name: doc.source.name || doc.source.domain,
+        domain: doc.source.domain,
+        scope: doc.source.scope as 'GLOBAL' | 'WORKSPACE',
+        tags: doc.source.tags || undefined,
+      },
+      scores: {
+        combined: docScores.combined,
+        text: docScores.text,
+        vector: docScores.vector,
+      },
+    });
   });
 
   // Sort by combined score

@@ -27,6 +27,11 @@ interface Job {
   completedAt: string | null
   createdAt: string
   progress: JobProgress
+  result?: {
+    documentsProcessed?: number
+    chunksCreated?: number
+    [key: string]: any
+  } | null
 }
 
 function formatElapsedTime(startTime: string, endTime?: string | null): string {
@@ -285,7 +290,12 @@ export function JobProgressDisplay({ sourceId, onComplete }: JobProgressProps) {
           </div>
         </div>
         <CardDescription>
-          {job.type === 'SCRAPE' ? 'Parallel processing pipeline' : 'Processing job'}
+          {job.type === 'SCRAPE'
+            ? 'Parallel processing pipeline'
+            : job.type === 'DOCUMENT_UPLOAD'
+            ? 'Document processing and embedding pipeline'
+            : 'Processing job'
+          }
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -318,7 +328,10 @@ export function JobProgressDisplay({ sourceId, onComplete }: JobProgressProps) {
 
         {job.status === 'COMPLETED' && (
           <div className="text-sm text-muted-foreground">
-            Successfully indexed {job.progress.completed} pages
+            {job.type === 'DOCUMENT_UPLOAD'
+              ? `Successfully processed ${job.result?.chunksCreated || 0} chunks from ${job.result?.documentsProcessed || 0} document(s)`
+              : `Successfully indexed ${job.progress.completed} pages`
+            }
             {job.progress.failed > 0 && ` (${job.progress.failed} failed)`}
           </div>
         )}

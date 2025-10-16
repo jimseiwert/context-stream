@@ -36,6 +36,9 @@ jobs:
           - dockerfile: docker/Dockerfile.worker
             image: worker
             context: .
+          - dockerfile: docker/Dockerfile.pdf-parser
+            image: pdf-parser 
+            context: .
 
     steps:
       - name: Checkout repository

@@ -48,32 +48,12 @@ export async function GET(
           select: {
             pages: true,
             workspaceSources: true,
+            documents: true,
           },
         },
-        jobs: {
-          where: {
-            type: "SCRAPE",
-          },
-          orderBy: { createdAt: "desc" },
-          take: 5,
-          select: {
-            id: true,
-            status: true,
-            createdAt: true,
-            startedAt: true,
-            completedAt: true,
-            errorMessage: true,
-            progress: true,
-          },
-        },
-        pages: {
-          take: 10,
-          orderBy: { indexedAt: "desc" },
-          select: {
-            id: true,
-            url: true,
-            title: true,
-            indexedAt: true,
+        workspaceSources: {
+          include: {
+            workspace: true,
           },
         },
       },
@@ -83,19 +63,48 @@ export async function GET(
       return NextResponse.json({ error: "Source not found" }, { status: 404 });
     }
 
+    // Fetch appropriate jobs based on source type
+    const jobs = await prisma.job.findMany({
+      where: {
+        sourceId: id,
+        type: source.type === 'DOCUMENT' ? 'DOCUMENT_UPLOAD' : 'SCRAPE',
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        createdAt: true,
+        startedAt: true,
+        completedAt: true,
+        errorMessage: true,
+        progress: true,
+        result: true,
+      },
+    });
+
+    // Fetch pages (only for non-DOCUMENT sources)
+    const pages = source.type !== 'DOCUMENT' ? await prisma.page.findMany({
+      where: { sourceId: id },
+      take: 10,
+      orderBy: { indexedAt: "desc" },
+      select: {
+        id: true,
+        url: true,
+        title: true,
+        indexedAt: true,
+      },
+    }) : [];
+
     // Check access: user must own the workspace or source must be global
     if (source.scope !== "GLOBAL") {
       // For workspace sources, check if user has access
-      const workspace = await prisma.workspaceSource.findFirst({
-        where: {
-          sourceId: source.id,
-          workspace: {
-            ownerId: session.user.id,
-          },
-        },
-      });
+      const hasAccess = source.workspaceSources.some(
+        ws => ws.workspace.ownerId === session.user.id
+      );
 
-      if (!workspace) {
+      if (!hasAccess) {
         return NextResponse.json(
           { error: "You do not have permission to access this source" },
           { status: 403 }
@@ -106,23 +115,27 @@ export async function GET(
     // Format response - map jobs to scrapeJobs for frontend compatibility
     const formattedSource = {
       ...source,
-      pageCount: source._count.pages,
+      // For DOCUMENT sources, use documents count; for others use pages count
+      pageCount: source.type === 'DOCUMENT' ? source._count.documents : source._count.pages,
       workspaceCount: source._count.workspaceSources,
-      scrapeJobs: source.jobs.map((job) => ({
+      scrapeJobs: jobs.map((job) => ({
         id: job.id,
         status: job.status,
         startedAt: job.startedAt || job.createdAt,
         completedAt: job.completedAt,
-        pagesScraped: (job.progress as any)?.completed || 0,
+        // For DOCUMENT_UPLOAD jobs, use result.documentsProcessed; for SCRAPE jobs use progress.completed
+        pagesScraped: job.type === 'DOCUMENT_UPLOAD'
+          ? ((job.result as any)?.documentsProcessed || (job.result as any)?.chunksCreated || 0)
+          : ((job.progress as any)?.completed || 0),
         errorMessage: job.errorMessage,
       })),
-      pages: source.pages.map((page) => ({
+      pages: pages.map((page) => ({
         id: page.id,
         url: page.url,
         title: page.title,
         lastScrapedAt: page.indexedAt, // Map indexedAt to lastScrapedAt for frontend
       })),
-      jobs: undefined, // Remove the jobs field
+      workspaceSources: undefined, // Remove internal field
       config: source.config || undefined,
     };
 
@@ -222,6 +235,7 @@ export async function PUT(
           select: {
             pages: true,
             workspaceSources: true,
+            documents: true,
           },
         },
       },
@@ -230,7 +244,8 @@ export async function PUT(
     return NextResponse.json({
       source: {
         ...updatedSource,
-        pageCount: updatedSource._count.pages,
+        // For DOCUMENT sources, use documents count; for others use pages count
+        pageCount: updatedSource.type === 'DOCUMENT' ? updatedSource._count.documents : updatedSource._count.pages,
         workspaceCount: updatedSource._count.workspaceSources,
         config: updatedSource.config || undefined,
       },

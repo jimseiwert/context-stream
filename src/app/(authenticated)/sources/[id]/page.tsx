@@ -1,5 +1,7 @@
 "use client";
 
+import { DocumentList } from "@/components/documents/document-list";
+import { DocumentUpload } from "@/components/documents/document-upload";
 import { JobProgressDisplay } from "@/components/sources/job-progress";
 import {
   AlertDialog,
@@ -60,6 +62,7 @@ import {
   RefreshCw,
   Settings,
   Trash2,
+  Upload,
   XCircle,
 } from "lucide-react";
 import Image from "next/image";
@@ -83,6 +86,7 @@ export default function SourceDetailPage({
   const updateSource = useUpdateSource(id);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "",
     maxPages: 1000,
@@ -306,29 +310,39 @@ export default function SourceDetailPage({
         <div className="flex items-center space-x-2">
           {canEdit && (
             <>
-              <Button variant="outline" onClick={handleEditClick}>
-                <Settings className="mr-2 h-4 w-4" />
-                Edit Settings
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleRescrape}
-                disabled={
-                  rescrapeSource.isPending || adminRescrapeSource.isPending
-                }
-              >
-                {rescrapeSource.isPending || adminRescrapeSource.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Re-scraping...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Re-scrape
-                  </>
-                )}
-              </Button>
+              {source.type !== 'DOCUMENT' && (
+                <>
+                  <Button variant="outline" onClick={handleEditClick}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Edit Settings
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleRescrape}
+                    disabled={
+                      rescrapeSource.isPending || adminRescrapeSource.isPending
+                    }
+                  >
+                    {rescrapeSource.isPending || adminRescrapeSource.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Re-scraping...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Re-scrape
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+              {source.type === 'DOCUMENT' && (
+                <Button onClick={() => setShowUploadDialog(true)}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Documents
+                </Button>
+              )}
               {(source.scope === "WORKSPACE" || (source.scope === "GLOBAL" && isAdmin)) && (
                 <Button
                   variant="destructive"
@@ -372,7 +386,7 @@ export default function SourceDetailPage({
             </div>
             <div>
               <p className="text-sm text-muted-foreground mb-1">
-                Pages Indexed
+                {source.type === 'DOCUMENT' ? 'Documents Uploaded' : 'Pages Indexed'}
               </p>
               <p className="font-medium">{source.pageCount.toLocaleString()}</p>
             </div>
@@ -438,8 +452,8 @@ export default function SourceDetailPage({
         </CardContent>
       </Card>
 
-      {/* Scrape Jobs */}
-      {source.scrapeJobs && source.scrapeJobs.length > 0 && (
+      {/* Scrape Jobs (hide for DOCUMENT sources) */}
+      {source.type !== 'DOCUMENT' && source.scrapeJobs && source.scrapeJobs.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Recent Scrape Jobs</CardTitle>
@@ -486,8 +500,13 @@ export default function SourceDetailPage({
         </Card>
       )}
 
-      {/* Indexed Pages */}
-      {source.pages && source.pages.length > 0 && (
+      {/* Document List (for DOCUMENT sources) */}
+      {source.type === 'DOCUMENT' && (
+        <DocumentList sourceId={id} />
+      )}
+
+      {/* Indexed Pages (for WEBSITE/GITHUB sources) */}
+      {source.type !== 'DOCUMENT' && source.pages && source.pages.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Indexed Pages</CardTitle>
@@ -783,6 +802,15 @@ export default function SourceDetailPage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Document Upload Dialog */}
+      {source.type === 'DOCUMENT' && (
+        <DocumentUpload
+          sourceId={id}
+          open={showUploadDialog}
+          onOpenChange={setShowUploadDialog}
+        />
+      )}
     </div>
   );
 }

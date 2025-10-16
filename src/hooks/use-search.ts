@@ -15,6 +15,22 @@ export interface SearchResult {
     scope: "GLOBAL" | "WORKSPACE"
   }
   score: number
+  scoreBreakdown?: {
+    textScore: number
+    vectorScore: number
+    baseScore: number
+    rerankedScore: number
+    signals: {
+      frameworkMatch: number
+      proximityMatch: number
+      titleMatch: number
+      codeQuality: number
+      recency: number
+      userFeedback: number
+    }
+    totalMultiplier: number
+    normalizedScore: number
+  }
 }
 
 export interface SearchFilters {
