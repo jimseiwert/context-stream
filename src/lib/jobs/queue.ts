@@ -8,10 +8,10 @@
  */
 
 import {
-  isBuildTime,
+  createRedisBlockingClient,
   getRedisClient,
   getRedisSubscriber,
-  createRedisBlockingClient,
+  isBuildTime,
 } from "@/lib/redis/lazy-client";
 import Queue from "bull";
 
@@ -49,8 +49,8 @@ function getScrapeQueue(): Queue.Queue {
           type: "exponential",
           delay: 2000,
         },
-        removeOnComplete: 100, // Keep last 100 completed jobs
-        removeOnFail: 500, // Keep last 500 failed jobs for debugging
+        removeOnComplete: 10, // Keep last 10 completed jobs
+        removeOnFail: 50, // Keep last 50 failed jobs for debugging
       },
     });
   }
@@ -86,8 +86,8 @@ function getEmbedQueue(): Queue.Queue {
           type: "exponential",
           delay: 2000,
         },
-        removeOnComplete: 100,
-        removeOnFail: 500,
+        removeOnComplete: 10,
+        removeOnFail: 50,
       },
     });
   }
@@ -123,8 +123,8 @@ function getUpdateQueue(): Queue.Queue {
           type: "exponential",
           delay: 5000,
         },
-        removeOnComplete: 50,
-        removeOnFail: 200,
+        removeOnComplete: 10,
+        removeOnFail: 50,
       },
     });
   }

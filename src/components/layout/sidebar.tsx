@@ -17,7 +17,8 @@ import {
   Plus,
   FolderKanban,
   Check,
-  ChevronsUpDown
+  ChevronsUpDown,
+  Cog
 } from "lucide-react"
 import { useWorkspaceContext } from "@/contexts/workspace-context"
 import {
@@ -42,6 +43,7 @@ const adminNavigation = [
   { name: "Admin Sources", href: "/admin/sources", icon: Database },
   { name: "Users", href: "/admin/users", icon: Users },
   { name: "Statistics", href: "/admin/stats", icon: BarChart3 },
+  { name: "System Settings", href: "/admin/system-settings", icon: Cog },
 ]
 
 interface SidebarProps {
@@ -150,7 +152,7 @@ export function Sidebar({ userRole = "USER" }: SidebarProps) {
               {adminNavigation.map((item) => {
                 const Icon = item.icon
                 const showItem =
-                  item.href === "/admin/users"
+                  item.href === "/admin/users" || item.href === "/admin/system-settings"
                     ? userRole === "SUPER_ADMIN"
                     : true
 

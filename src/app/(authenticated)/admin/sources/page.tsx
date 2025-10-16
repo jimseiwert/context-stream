@@ -484,21 +484,21 @@ export default function AdminSourcesPage() {
             <AlertDialogDescription>
               Are you sure you want to promote{" "}
               <strong>{selectedSource?.domain}</strong> to global scope?
-              <div className="mt-4 space-y-2 text-sm">
-                <p className="font-medium">This will:</p>
-                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>
-                    Make this source accessible to all users across all
-                    workspaces
-                  </li>
-                  <li>
-                    Share all {selectedSource?.pageCount || 0} indexed pages
-                    globally
-                  </li>
-                  <li>Reduce redundant indexing and improve efficiency</li>
-                </ul>
-              </div>
             </AlertDialogDescription>
+            <div className="mt-4 space-y-2 text-sm">
+              <p className="font-medium">This will:</p>
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                <li>
+                  Make this source accessible to all users across all
+                  workspaces
+                </li>
+                <li>
+                  Share all {selectedSource?.pageCount || 0} indexed pages
+                  globally
+                </li>
+                <li>Reduce redundant indexing and improve efficiency</li>
+              </ul>
+            </div>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={promoteMutation.isPending}>
@@ -526,24 +526,24 @@ export default function AdminSourcesPage() {
             <AlertDialogDescription>
               Are you sure you want to re-scrape{" "}
               <strong>{selectedSource?.domain}</strong>?
-              <div className="mt-4 space-y-2 text-sm">
-                <p className="font-medium">This will:</p>
-                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>
-                    Delete all {selectedSource?.pageCount || 0} existing indexed
-                    pages
-                  </li>
-                  <li>Re-index the entire source from scratch</li>
-                  <li>Take approximately 5-10 minutes to complete</li>
-                  {selectedSource?.scope === "GLOBAL" && (
-                    <li className="text-yellow-700 dark:text-yellow-400">
-                      This is a <strong>GLOBAL</strong> source - all users will
-                      be affected
-                    </li>
-                  )}
-                </ul>
-              </div>
             </AlertDialogDescription>
+            <div className="mt-4 space-y-2 text-sm">
+              <p className="font-medium">This will:</p>
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                <li>
+                  Delete all {selectedSource?.pageCount || 0} existing indexed
+                  pages
+                </li>
+                <li>Re-index the entire source from scratch</li>
+                <li>Take approximately 5-10 minutes to complete</li>
+                {selectedSource?.scope === "GLOBAL" && (
+                  <li className="text-yellow-700 dark:text-yellow-400">
+                    This is a <strong>GLOBAL</strong> source - all users will
+                    be affected
+                  </li>
+                )}
+              </ul>
+            </div>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={rescrapeSource.isPending}>
@@ -568,23 +568,23 @@ export default function AdminSourcesPage() {
             <AlertDialogDescription>
               Are you sure you want to delete{" "}
               <strong>{selectedSource?.domain}</strong>?
-              <div className="mt-4 space-y-2 text-sm">
-                <p className="font-medium text-destructive">
-                  ⚠️ This action cannot be undone!
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>
-                    This will permanently delete all {selectedSource?.pageCount || 0} indexed pages
-                  </li>
-                  <li>All embeddings and search data will be lost</li>
-                  <li className="text-red-700 dark:text-red-400 font-medium">
-                    This is a <strong>GLOBAL</strong> source - all users across all
-                    workspaces will lose access
-                  </li>
-                  <li>Users will need to re-add this source if needed in the future</li>
-                </ul>
-              </div>
             </AlertDialogDescription>
+            <div className="mt-4 space-y-2 text-sm">
+              <p className="font-medium text-destructive">
+                ⚠️ This action cannot be undone!
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                <li>
+                  This will permanently delete all {selectedSource?.pageCount || 0} indexed pages
+                </li>
+                <li>All embeddings and search data will be lost</li>
+                <li className="text-red-700 dark:text-red-400 font-medium">
+                  This is a <strong>GLOBAL</strong> source - all users across all
+                  workspaces will lose access
+                </li>
+                <li>Users will need to re-add this source if needed in the future</li>
+              </ul>
+            </div>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteSource.isPending}>

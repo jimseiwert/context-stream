@@ -1,19 +1,34 @@
-// OpenAI Embedding Provider
-// Uses OpenAI API for generating embeddings
+// Azure OpenAI Embedding Provider
+// Uses Azure OpenAI Service for generating embeddings
 
 import OpenAI from 'openai'
 import type { EmbeddingConfig } from './config'
 import { EmbeddingProvider, ChunkWithEmbedding } from './provider'
 import { chunkText } from './chunker'
 
-export class OpenAIEmbeddingProvider implements EmbeddingProvider {
+export class AzureOpenAIEmbeddingProvider implements EmbeddingProvider {
   private client: OpenAI
   private model: string
   private dimensions: number
 
   constructor(config: EmbeddingConfig) {
+    if (!config.apiEndpoint) {
+      throw new Error('Azure OpenAI requires an API endpoint')
+    }
+
+    if (!config.deploymentName) {
+      throw new Error('Azure OpenAI requires a deployment name')
+    }
+
+    // Azure OpenAI uses a different base URL structure
+    // Format: https://{resourceName}.openai.azure.com/openai/deployments/{deploymentName}
+    const baseURL = `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`
+
     this.client = new OpenAI({
       apiKey: config.apiKey,
+      baseURL,
+      defaultQuery: { 'api-version': '2024-06-01' },
+      defaultHeaders: { 'api-key': config.apiKey },
     })
 
     this.model = config.model
@@ -28,15 +43,15 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
 
     try {
       const response = await this.client.embeddings.create({
-        model: this.model,
+        model: this.model, // Azure uses model name from deployment
         input: texts,
         dimensions: this.dimensions,
       })
 
       return response.data.map((item) => item.embedding)
     } catch (error) {
-      console.error('Failed to generate embeddings:', error)
-      throw new Error(`Embedding generation failed: ${error}`)
+      console.error('Failed to generate Azure OpenAI embeddings:', error)
+      throw new Error(`Azure OpenAI embedding generation failed: ${error}`)
     }
   }
 
@@ -45,7 +60,6 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
    */
   async chunkAndEmbed(text: string): Promise<ChunkWithEmbedding[]> {
     // Split text into chunks with conservative limits
-    // Max 400 tokens per chunk to ensure we stay well under API limits
     const chunks = chunkText(text, {
       maxTokens: 400,
       overlap: 50,
@@ -54,19 +68,17 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     if (chunks.length === 0) return []
 
     // Process one chunk at a time to avoid token limit errors
-    // OpenAI embedding API has 8192 token limit per request
-    // By processing individually, we guarantee we never exceed the limit
     const allEmbeddings: number[][] = []
 
     for (const chunk of chunks) {
       // Hard character limit: ~3000 chars = ~750 tokens (conservative estimate)
-      // This ensures we stay well under the 8192 token limit even with worst-case tokenization
       const MAX_CHARS = 3000
       let content = chunk.content
 
       if (content.length > MAX_CHARS) {
-        // NOTE: This is expected behavior for large chunks, not an error
-        console.log(`[Embeddings] Chunk truncated from ${content.length} to ${MAX_CHARS} chars (within API limits)`)
+        console.log(
+          `[Azure Embeddings] Chunk truncated from ${content.length} to ${MAX_CHARS} chars`
+        )
         content = content.substring(0, MAX_CHARS)
       }
 

@@ -477,3 +477,42 @@ model UsageEvent {
   @@index([userId, eventType, timestamp])
   @@index([timestamp])
 }
+
+// ========================================
+// System Configuration
+// ========================================
+
+enum EmbeddingProvider {
+  OPENAI // OpenAI embedding API
+  AZURE_OPENAI // Azure OpenAI Service
+  VERTEX_AI // Google Vertex AI
+}
+
+// Embedding provider configuration
+model EmbeddingProviderConfig {
+  id           String            @id @default(uuid())
+  provider     EmbeddingProvider
+  model        String // e.g., "text-embedding-3-small"
+  dimensions   Int // e.g., 1536, 3072, 768
+  apiKey       String            @db.Text // Encrypted API key
+  apiEndpoint  String? // For Azure/Vertex custom endpoints
+  deploymentName String? // Azure only - deployment name in URL
+
+  // Batch API configuration
+  useBatchForNew      Boolean @default(false) // Use batch API for initial scrapes
+  useBatchForRescrape Boolean @default(true) // Use batch API for rescrapes
+
+  // Additional provider-specific settings
+  additionalConfig Json? // Vertex: projectId, location; etc.
+
+  // Activation status
+  isActive Boolean @default(false) // Only one can be active at a time
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([provider])
+  @@map("embedding_provider_configs")
+}

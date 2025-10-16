@@ -13,10 +13,12 @@
 import { createChunks } from "@/lib/db/queries/chunks";
 import { upsertPage } from "@/lib/db/queries/pages";
 import { getEmbeddingProvider } from "@/lib/embeddings/provider";
+import { getActiveEmbeddingConfig } from "@/lib/embeddings/config";
 import { ContentExtractor } from "@/lib/scraper/content-extractor";
 import { LlmsTxtParser } from "@/lib/scraper/llms-txt-parser";
 import { RobotsParser } from "@/lib/scraper/robots-parser";
 import { SitemapParser } from "@/lib/scraper/sitemap-parser";
+import { BotProtectionDetector, type ProtectionLevel } from "@/lib/scraper/bot-protection-detector";
 import { extractAndVerifyFavicon } from "@/lib/favicon-extractor";
 import { prisma } from "@/lib/db";
 import * as cheerio from "cheerio";
@@ -81,7 +83,7 @@ export class PipelineProcessor {
   private llmsTxtParser: LlmsTxtParser;
   private sitemapParser: SitemapParser;
   private contentExtractor: ContentExtractor;
-  private embeddingProvider: ReturnType<typeof getEmbeddingProvider>;
+  private botProtectionDetector: BotProtectionDetector;
 
   private fetchQueue: PageTask[] = [];
   private extractQueue: PageTask[] = [];
@@ -91,12 +93,16 @@ export class PipelineProcessor {
   private isProcessing = false;
   private isCancelled = false;
   private config: PipelineConfig;
+  private protectionLevel: ProtectionLevel = 'none';
 
   // Track best name score - always check first few pages to potentially find better metadata
   // During rescrape, we preserve existing good metadata by initializing with reasonable baseline scores
   private bestNameScore = 0;
   private pagesCheckedForMetadata = 0;
   private readonly MAX_PAGES_TO_CHECK_FOR_METADATA = 3;
+
+  // Track sitemap URLs for merge with crawled URLs
+  private sitemapUrls = new Set<string>();
 
   // Progress counters (independent of task map for accurate progress after cleanup)
   private totalTasksDiscovered = 0;
@@ -113,6 +119,8 @@ export class PipelineProcessor {
   };
 
   constructor(config: PipelineConfig) {
+    // Store config with defaults
+    // Note: Concurrency will be adjusted after bot protection detection in process()
     this.config = {
       fetchConcurrency: 5,
       extractConcurrency: 3,
@@ -120,11 +128,12 @@ export class PipelineProcessor {
       saveConcurrency: 3,
       ...config,
     };
+
     this.robotsParser = new RobotsParser();
     this.llmsTxtParser = new LlmsTxtParser();
     this.sitemapParser = new SitemapParser();
     this.contentExtractor = new ContentExtractor();
-    this.embeddingProvider = getEmbeddingProvider();
+    this.botProtectionDetector = new BotProtectionDetector();
   }
 
   /**
@@ -156,6 +165,19 @@ export class PipelineProcessor {
       await this.robotsParser.load(this.config.domain);
     }
 
+    // Detect bot protection and adjust scraping behavior
+    console.log(`[Pipeline] Detecting bot protection for ${this.config.startUrl}...`);
+    const crawlDelay = this.robotsParser.getCrawlDelay();
+    const protectionResult = await this.botProtectionDetector.detect(this.config.startUrl, crawlDelay);
+    this.protectionLevel = protectionResult.level;
+
+    console.log(`[Pipeline] ${protectionResult.details}`);
+
+    // Adjust concurrency based on protection level
+    const concurrencySettings = this.getConcurrencyForProtectionLevel(protectionResult.level);
+    this.config.fetchConcurrency = concurrencySettings.fetch;
+    console.log(`[Pipeline] Adjusted fetch concurrency to ${this.config.fetchConcurrency} based on protection level`);
+
     // Efficiency Strategy:
     // 1. Check for llms-full.txt (complete content in one file)
     // 2. Check for llms.txt (summary + links to pages)
@@ -165,9 +187,9 @@ export class PipelineProcessor {
     const baseUrl = `https://${this.config.domain}`;
     let usedEfficientMethod = false;
 
-    // Try llms.txt first
-    console.log(`[Pipeline] Checking for llms.txt files...`);
-    const llmsTxtResult = await this.llmsTxtParser.check(baseUrl);
+    // Try llms.txt first (check startUrl path, then domain)
+    console.log(`[Pipeline] Checking for llms.txt files at ${this.config.startUrl} and ${baseUrl}...`);
+    const llmsTxtResult = await this.llmsTxtParser.check(this.config.startUrl, baseUrl);
 
     if (
       llmsTxtResult.found &&
@@ -214,31 +236,32 @@ export class PipelineProcessor {
       usedEfficientMethod = true;
     }
 
-    // Try sitemap if llms.txt not found or incomplete
+    // Try sitemap if llms.txt not found
+    // Note: We store sitemap URLs but ALSO crawl manually to ensure completeness
     if (!usedEfficientMethod) {
       console.log(`[Pipeline] Checking for sitemap.xml...`);
       const sitemapResult = await this.sitemapParser.parse(baseUrl, this.config.maxPages);
 
       if (sitemapResult.found && sitemapResult.urls.length > 0) {
         console.log(
-          `[Pipeline] Found sitemap with ${sitemapResult.urls.length} URLs`
+          `[Pipeline] Found sitemap with ${sitemapResult.urls.length} URLs (will merge with crawled URLs)`
         );
 
-        // Process sitemap URLs in the order they're returned
-        // Sitemaps typically have important pages (homepage, main sections) first
+        // Store sitemap URLs for later merging with crawled results
         for (const url of sitemapResult.urls) {
           // Skip sitemaps, feeds, and other non-content files
           if (!this.isNonContentFile(url)) {
-            this.addTask({
-              url,
-              depth: 0,
-              stage: "QUEUED",
-            });
+            // Normalize URL before storing
+            const normalized = this.normalizeUrl(url);
+            if (normalized) {
+              this.sitemapUrls.add(normalized);
+            }
           } else {
             console.log(`[Pipeline] Skipping non-content URL from sitemap: ${url}`);
           }
         }
-        usedEfficientMethod = true;
+
+        console.log(`[Pipeline] Stored ${this.sitemapUrls.size} sitemap URLs for later merge`);
       }
     }
 
@@ -264,6 +287,41 @@ export class PipelineProcessor {
       this.runSaveWorkers(),
     ]);
 
+    // After crawling completes, merge sitemap URLs with crawled URLs
+    // Add any sitemap URLs that weren't discovered during crawling
+    if (this.sitemapUrls.size > 0) {
+      const missingSitemapUrls = Array.from(this.sitemapUrls).filter(
+        (url) => !this.visited.has(url)
+      );
+
+      if (missingSitemapUrls.length > 0) {
+        console.log(
+          `[Pipeline] Found ${missingSitemapUrls.length} URLs in sitemap that weren't discovered during crawl`
+        );
+        console.log(`[Pipeline] Adding missing sitemap URLs to queue...`);
+
+        // Add missing URLs to the queue
+        for (const url of missingSitemapUrls) {
+          this.addTask({
+            url,
+            depth: 0,
+            stage: "QUEUED",
+          });
+        }
+
+        // Process the additional URLs
+        console.log(`[Pipeline] Processing additional ${missingSitemapUrls.length} URLs from sitemap...`);
+        await Promise.all([
+          this.runFetchWorkers(),
+          this.runExtractWorkers(),
+          this.runEmbedWorkers(),
+          this.runSaveWorkers(),
+        ]);
+      } else {
+        console.log(`[Pipeline] ✓ All sitemap URLs were discovered during crawl`);
+      }
+    }
+
     const stats = this.getProgress();
     console.log(
       `[Pipeline] Completed: ${stats.completed}, Failed: ${stats.failed}`
@@ -272,10 +330,66 @@ export class PipelineProcessor {
     // Print detailed failure summary
     this.printFailureSummary();
 
+    // Purge old URLs that weren't found in this scrape
+    await this.purgeStalePages();
+
     return {
       completed: stats.completed,
       failed: stats.failed,
     };
+  }
+
+  /**
+   * Purge pages that existed before but weren't found in current scrape
+   */
+  private async purgeStalePages() {
+    try {
+      console.log(`[Pipeline] Checking for stale pages to purge...`);
+
+      // Get all existing pages for this source
+      const existingPages = await prisma.page.findMany({
+        where: { sourceId: this.config.sourceId },
+        select: { id: true, url: true },
+      });
+
+      if (existingPages.length === 0) {
+        console.log(`[Pipeline] No existing pages to check`);
+        return;
+      }
+
+      // Find pages that weren't visited in this scrape
+      const stalePageIds: string[] = [];
+      for (const page of existingPages) {
+        const normalizedUrl = this.normalizeUrl(page.url);
+        if (normalizedUrl && !this.visited.has(normalizedUrl)) {
+          stalePageIds.push(page.id);
+        }
+      }
+
+      if (stalePageIds.length === 0) {
+        console.log(`[Pipeline] ✓ No stale pages found`);
+        return;
+      }
+
+      console.log(
+        `[Pipeline] Found ${stalePageIds.length} stale pages (out of ${existingPages.length} total)`
+      );
+      console.log(`[Pipeline] Purging stale pages...`);
+
+      // Delete stale pages (chunks will be cascade deleted)
+      const deleteResult = await prisma.page.deleteMany({
+        where: {
+          id: { in: stalePageIds },
+        },
+      });
+
+      console.log(
+        `[Pipeline] ✓ Purged ${deleteResult.count} stale pages from database`
+      );
+    } catch (error: any) {
+      console.error(`[Pipeline] Failed to purge stale pages:`, error.message);
+      // Don't fail the entire scrape if purge fails
+    }
   }
 
   /**
@@ -456,6 +570,27 @@ export class PipelineProcessor {
         continue;
       }
 
+      // Build headers OUTSIDE try block so they're accessible in retry logic
+      const headers: Record<string, string> = {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": task.referer ? "same-origin" : "none",
+        "Cache-Control": "max-age=0",
+      };
+
+      // Add Referer header if we followed a link (makes requests look legitimate)
+      if (task.referer) {
+        headers["Referer"] = task.referer;
+      }
+
       try {
         // Skip non-content files
         if (this.isNonContentFile(task.url)) {
@@ -471,28 +606,31 @@ export class PipelineProcessor {
 
         console.log(`[Pipeline] Fetching: ${task.url}`);
 
-        // Build headers - include Referer if this is a followed link (not initial page)
-        const headers: Record<string, string> = {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Accept-Encoding": "gzip, deflate, br",
-          "DNT": "1",
-          "Connection": "keep-alive",
-          "Upgrade-Insecure-Requests": "1",
-          "Sec-Fetch-Dest": "document",
-          "Sec-Fetch-Mode": "navigate",
-          "Sec-Fetch-Site": task.referer ? "same-origin" : "none",
-          "Cache-Control": "max-age=0",
-        };
-
-        // Add Referer header if we followed a link (makes requests look legitimate)
-        if (task.referer) {
-          headers["Referer"] = task.referer;
+        // Add delay based on detected protection level
+        const delayRange = this.getDelayRangeForProtectionLevel(this.protectionLevel);
+        if (delayRange.max > 0) {
+          const delayMs = delayRange.min + Math.random() * (delayRange.max - delayRange.min);
+          await this.sleep(delayMs);
         }
 
-        const response = await fetch(task.url, { headers });
+        // Fetch with explicit redirect handling to log redirect chains
+        const response = await fetch(task.url, {
+          headers,
+          redirect: 'follow'
+        });
+
+        // Log if URL was redirected
+        if (response.redirected && response.url !== task.url) {
+          console.log(`[Pipeline] Redirected: ${task.url} → ${response.url}`);
+
+          // Update task URL to the final redirected URL
+          const finalUrl = response.url;
+          const normalizedFinalUrl = this.normalizeUrl(finalUrl);
+
+          if (normalizedFinalUrl && normalizedFinalUrl !== task.url) {
+            this.visited.add(normalizedFinalUrl);
+          }
+        }
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -520,10 +658,51 @@ export class PipelineProcessor {
         this.extractQueue.push(task);
         this.reportProgress();
       } catch (error: any) {
-        console.error(
-          `[Pipeline] Fetch failed for ${task.url}:`,
-          error.message
-        );
+        // Special handling for 403: try with opposite trailing slash
+        if (error.message.includes('HTTP 403') && !task.url.includes('?')) {
+          const hasTrailingSlash = task.url.endsWith('/');
+          const alternateUrl = hasTrailingSlash
+            ? task.url.slice(0, -1) // Remove trailing slash
+            : task.url + '/'; // Add trailing slash
+
+          console.log(
+            `[Pipeline] 403 error, retrying with ${hasTrailingSlash ? 'without' : 'with'} trailing slash: ${alternateUrl}`
+          );
+
+          try {
+            const retryResponse = await fetch(alternateUrl, {
+              headers,
+              redirect: 'follow'
+            });
+
+            if (retryResponse.ok) {
+              console.log(`[Pipeline] ✓ Retry successful! Using ${alternateUrl}`);
+
+              // Update task URL to the working version
+              task.url = alternateUrl;
+
+              // Update visited set with the correct URL
+              this.visited.delete(task.url);
+              this.visited.add(alternateUrl);
+
+              // Log redirect if it happened
+              if (retryResponse.redirected && retryResponse.url !== alternateUrl) {
+                console.log(`[Pipeline] Redirected: ${alternateUrl} → ${retryResponse.url}`);
+              }
+
+              const html = await retryResponse.text();
+              task.html = html;
+              task.stage = "EXTRACTING";
+              this.extractQueue.push(task);
+              this.reportProgress();
+              continue; // Skip error handling, we succeeded
+            }
+          } catch (retryError: any) {
+            console.log(`[Pipeline] Retry also failed: ${retryError.message}`);
+          }
+        }
+
+        console.error(`[Pipeline] Fetch failed for ${task.url}: ${error.message}`);
         task.stage = "FAILED";
         task.error = `[FETCH] ${error.message}`;
         this.totalFailed++;
@@ -730,11 +909,39 @@ export class PipelineProcessor {
       }
 
       try {
-        // Skip embeddings for re-scrapes (will be processed via batch API later)
+        // Check if page exists with same checksum to avoid wasting embedding costs
+        const existingPage = await prisma.page.findUnique({
+          where: {
+            sourceId_url: {
+              sourceId: this.config.sourceId,
+              url: task.url,
+            },
+          },
+          select: { checksum: true },
+        });
+
+        // If content hasn't changed, skip embedding generation
+        if (existingPage && existingPage.checksum === task.content.checksum) {
+          console.log(
+            `[Pipeline] Content unchanged for ${task.url}, skipping embedding`
+          );
+          task.stage = "SAVING";
+          this.saveQueue.push(task);
+          this.reportProgress();
+          continue;
+        }
+
+        // Load active config to check batch API flags
+        const embeddingConfig = await getActiveEmbeddingConfig();
         const isInitialScrape = this.config.isInitialScrape ?? true;
 
-        if (!isInitialScrape) {
-          console.log(`[Pipeline] Skipping embedding for re-scrape: ${task.url} (will use batch API)`);
+        // Determine if we should use batch API based on config flags
+        const shouldUseBatch = isInitialScrape
+          ? embeddingConfig.useBatchForNew
+          : embeddingConfig.useBatchForRescrape;
+
+        if (shouldUseBatch) {
+          console.log(`[Pipeline] Skipping embedding for ${task.url} (batch API enabled for ${isInitialScrape ? 'new scrapes' : 'rescrapes'})`);
           task.stage = "SAVING";
           this.saveQueue.push(task);
           this.reportProgress();
@@ -745,7 +952,9 @@ export class PipelineProcessor {
 
         // Generate embeddings if content is long enough
         if (task.content.text && task.content.text.length > 50) {
-          const chunks = await this.embeddingProvider.chunkAndEmbed(
+          // Get embedding provider on-demand
+          const embeddingProvider = await getEmbeddingProvider();
+          const chunks = await embeddingProvider.chunkAndEmbed(
             task.content.text
           );
           console.log(
@@ -994,6 +1203,42 @@ export class PipelineProcessor {
   }
 
   /**
+   * Get concurrency settings based on protection level
+   */
+  private getConcurrencyForProtectionLevel(level: ProtectionLevel): { fetch: number } {
+    switch (level) {
+      case 'none':
+        return { fetch: 5 }; // Default: 5 concurrent fetch workers
+      case 'low':
+        return { fetch: 3 }; // Moderate: 3 concurrent fetch workers
+      case 'medium':
+        return { fetch: 2 }; // Careful: 2 concurrent fetch workers
+      case 'high':
+        return { fetch: 1 }; // Very careful: 1 fetch worker (sequential)
+      default:
+        return { fetch: 5 };
+    }
+  }
+
+  /**
+   * Get delay range (min, max) in milliseconds based on protection level
+   */
+  private getDelayRangeForProtectionLevel(level: ProtectionLevel): { min: number; max: number } {
+    switch (level) {
+      case 'none':
+        return { min: 0, max: 0 }; // No delay
+      case 'low':
+        return { min: 500, max: 1000 }; // 0.5-1 second delay
+      case 'medium':
+        return { min: 1000, max: 2000 }; // 1-2 second delay
+      case 'high':
+        return { min: 2000, max: 4000 }; // 2-4 second delay
+      default:
+        return { min: 0, max: 0 };
+    }
+  }
+
+  /**
    * Sleep helper
    */
   private sleep(ms: number): Promise<void> {
@@ -1022,8 +1267,8 @@ export class PipelineProcessor {
    * Normalize URL to prevent duplicates
    * - Remove hash fragments
    * - Remove query parameters (except for pages that require them)
-   * - Remove trailing slash (except for root URLs)
    * - Lowercase hostname
+   * - Smart trailing slash handling: preserve for directories, remove for files
    */
   private normalizeUrl(url: string): string | null {
     try {
@@ -1040,9 +1285,20 @@ export class PipelineProcessor {
       // but for documentation scraping, we typically want the canonical version
       parsed.search = '';
 
-      // Remove trailing slash for non-root paths
-      if (parsed.pathname !== '/' && parsed.pathname.endsWith('/')) {
-        parsed.pathname = parsed.pathname.slice(0, -1);
+      // Trailing slash handling:
+      // - Keep root path as-is: '/'
+      // - Only remove trailing slash if path looks like a file (has extension)
+      // - Preserve trailing slash for directory-like paths
+      // This helps with servers that are strict about trailing slashes
+      if (parsed.pathname !== '/') {
+        const lastSegment = parsed.pathname.split('/').pop() || '';
+        const hasFileExtension = lastSegment.includes('.') && !lastSegment.startsWith('.');
+
+        // Only remove trailing slash for file paths with extensions
+        if (hasFileExtension && parsed.pathname.endsWith('/')) {
+          parsed.pathname = parsed.pathname.slice(0, -1);
+        }
+        // Otherwise preserve the original trailing slash (or lack thereof)
       }
 
       return parsed.href;

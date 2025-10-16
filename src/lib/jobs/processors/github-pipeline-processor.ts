@@ -13,6 +13,7 @@
 import { createChunks } from "@/lib/db/queries/chunks";
 import { upsertPage } from "@/lib/db/queries/pages";
 import { getEmbeddingProvider } from "@/lib/embeddings/provider";
+import { getActiveEmbeddingConfig } from "@/lib/embeddings/config";
 import { GitHubClient, GitHubFile } from "@/lib/scraper/github-client";
 
 export interface GitHubTask {
@@ -54,7 +55,6 @@ export interface GitHubPipelineConfig {
 export class GitHubPipelineProcessor {
   private tasks = new Map<string, GitHubTask>();
   private githubClient: GitHubClient;
-  private embeddingProvider: ReturnType<typeof getEmbeddingProvider>;
 
   private fetchQueue: GitHubTask[] = [];
   private embedQueue: GitHubTask[] = [];
@@ -85,7 +85,6 @@ export class GitHubPipelineProcessor {
       ...config,
     };
     this.githubClient = new GitHubClient(config.githubToken);
-    this.embeddingProvider = getEmbeddingProvider();
   }
 
   /**
@@ -305,11 +304,17 @@ export class GitHubPipelineProcessor {
       }
 
       try {
-        // Skip embeddings for re-scrapes (will be processed via batch API later)
+        // Load active config to check batch API flags
+        const embeddingConfig = await getActiveEmbeddingConfig();
         const isInitialScrape = this.config.isInitialScrape ?? true;
 
-        if (!isInitialScrape) {
-          console.log(`[GitHub Pipeline] Skipping embedding for re-scrape: ${task.file.path} (will use batch API)`);
+        // Determine if we should use batch API based on config flags
+        const shouldUseBatch = isInitialScrape
+          ? embeddingConfig.useBatchForNew
+          : embeddingConfig.useBatchForRescrape;
+
+        if (shouldUseBatch) {
+          console.log(`[GitHub Pipeline] Skipping embedding for ${task.file.path} (batch API enabled for ${isInitialScrape ? 'new scrapes' : 'rescrapes'})`);
           task.stage = "SAVING";
           this.saveQueue.push(task);
           this.reportProgress();
@@ -320,7 +325,9 @@ export class GitHubPipelineProcessor {
 
         // Generate embeddings if content is long enough
         if (task.content && task.content.length > 50) {
-          const chunks = await this.embeddingProvider.chunkAndEmbed(
+          // Get embedding provider on-demand
+          const embeddingProvider = await getEmbeddingProvider();
+          const chunks = await embeddingProvider.chunkAndEmbed(
             task.content
           );
           console.log(

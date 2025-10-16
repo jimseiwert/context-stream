@@ -8,13 +8,16 @@
  * Or: npm run worker (add to package.json scripts)
  */
 
+import { prisma } from "@/lib/db";
 import { getRedisClient } from "@/lib/redis/lazy-client";
+import {
+  startBatchPollingWorker,
+  stopBatchPollingWorker,
+} from "./batch-polling-worker";
 import { processScrapeJob } from "./processors/scrape-job";
 import { addScrapeJob, embedQueue, scrapeQueue, updateQueue } from "./queue";
 import { startScheduler, stopScheduler } from "./scheduler";
-import { startBatchPollingWorker, stopBatchPollingWorker } from "./batch-polling-worker";
-import cron from "node-cron";
-import { prisma } from "@/lib/db";
+import { validateEncryptionKey, getActiveEmbeddingConfig } from "@/lib/embeddings/config";
 
 // Check environment variables
 function checkEnvironment() {
@@ -25,31 +28,28 @@ function checkEnvironment() {
   // Check if we're using REDIS_URL or individual fields
   const hasRedisUrl = process.env.REDIS_URL;
 
-  const requiredVars = [
-    'DATABASE_URL',
-    'OPENAI_API_KEY'
-  ];
+  const requiredVars = ["DATABASE_URL", "ENCRYPTION_KEY"];
 
   // Add Redis requirements based on connection method
- requiredVars.push('REDIS_URL');
+  requiredVars.push("REDIS_URL");
 
   const optionalVars = [
-    'NODE_ENV',
-    ...(hasRedisUrl ? [] : ['REDIS_PASSWORD'])  // Only optional when using individual fields
+    "NODE_ENV",
+    ...(hasRedisUrl ? [] : ["REDIS_PASSWORD"]), // Only optional when using individual fields
   ];
 
   let missingVars: string[] = [];
 
   console.log("\n✓ Required Variables:");
-  requiredVars.forEach(varName => {
+  requiredVars.forEach((varName) => {
     // Handle special case for Redis URL check
-    if (varName === 'REDIS_URL') {
+    if (varName === "REDIS_URL") {
       const redisUrl = process.env.REDIS_URL;
       if (!redisUrl) {
         console.log(`  ✗ REDIS_URL: NOT SET`);
-        missingVars.push('REDIS_URL');
+        missingVars.push("REDIS_URL");
       } else {
-        const displayValue = redisUrl.substring(0, 30) + '...';
+        const displayValue = redisUrl.substring(0, 30) + "...";
         console.log(`  ✓ REDIS_URL: ${displayValue}`);
       }
       return;
@@ -61,20 +61,22 @@ function checkEnvironment() {
       missingVars.push(varName);
     } else {
       // Mask sensitive values
-      const displayValue = ['DATABASE_URL', 'OPENAI_API_KEY', 'REDIS_PASSWORD'].includes(varName)
-        ? value.substring(0, 20) + '...'
+      const displayValue = [
+        "DATABASE_URL",
+        "ENCRYPTION_KEY",
+        "REDIS_PASSWORD",
+      ].includes(varName)
+        ? value.substring(0, 20) + "..."
         : value;
       console.log(`  ✓ ${varName}: ${displayValue}`);
     }
   });
 
   console.log("\n✓ Optional Variables:");
-  optionalVars.forEach(varName => {
+  optionalVars.forEach((varName) => {
     const value = process.env[varName];
     if (value) {
-      const displayValue = varName === 'REDIS_PASSWORD'
-        ? '***'
-        : value;
+      const displayValue = varName === "REDIS_PASSWORD" ? "***" : value;
       console.log(`  ✓ ${varName}: ${displayValue}`);
     } else {
       console.log(`  - ${varName}: Not set (optional)`);
@@ -83,8 +85,10 @@ function checkEnvironment() {
 
   if (missingVars.length > 0) {
     console.log("\n⚠️  WARNING: Missing required environment variables:");
-    missingVars.forEach(varName => console.log(`  - ${varName}`));
-    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+    missingVars.forEach((varName) => console.log(`  - ${varName}`));
+    throw new Error(
+      `Missing required environment variables: ${missingVars.join(", ")}`
+    );
   }
 
   console.log("\n✓ All required environment variables are set");
@@ -118,6 +122,51 @@ async function checkRedisConnection() {
   }
 }
 
+// Check embedding provider configuration
+async function checkEmbeddingConfig() {
+  console.log("\n========================================");
+  console.log("Embedding Provider Configuration Check");
+  console.log("========================================\n");
+
+  try {
+    // Validate encryption key format
+    console.log("Validating encryption key...");
+    try {
+      validateEncryptionKey();
+      console.log("  ✓ Encryption key is valid");
+    } catch (error: any) {
+      console.error("  ✗ Encryption key validation failed:", error.message);
+      throw new Error(
+        "Invalid ENCRYPTION_KEY. Generate a new one with: npm run generate-encryption-key"
+      );
+    }
+
+    // Check for active embedding provider config
+    console.log("\nChecking for active embedding provider...");
+    try {
+      const config = await getActiveEmbeddingConfig();
+      console.log("  ✓ Active embedding provider found:");
+      console.log(`    Provider: ${config.provider}`);
+      console.log(`    Model: ${config.model}`);
+      console.log(`    Dimensions: ${config.dimensions}`);
+      console.log(`    Batch for new scrapes: ${config.useBatchForNew ? 'enabled' : 'disabled'}`);
+      console.log(`    Batch for rescrapes: ${config.useBatchForRescrape ? 'enabled' : 'disabled'}`);
+    } catch (error: any) {
+      console.error("  ✗ No active embedding provider configured");
+      throw new Error(
+        "No active embedding provider found. " +
+        "Super admin must configure an embedding provider at /admin/system-settings"
+      );
+    }
+
+    console.log("\n✓ Embedding configuration is valid");
+    console.log("========================================\n");
+  } catch (error: any) {
+    console.error("\n✗ Embedding configuration check failed:", error.message);
+    throw error;
+  }
+}
+
 // Initialize queues and set up processors
 async function initializeWorker() {
   console.log("\n========================================");
@@ -128,7 +177,10 @@ async function initializeWorker() {
     // Process scrape jobs
     // MEMORY FIX: Limit to 1 concurrent job to prevent OOM on Railway's 1GB plan
     console.log("Setting up scrape queue processor...");
-    const concurrentJobs = parseInt(process.env.WORKER_CONCURRENT_JOBS || '1', 10);
+    const concurrentJobs = parseInt(
+      process.env.WORKER_CONCURRENT_JOBS || "1",
+      10
+    );
     console.log(`  Concurrent jobs limit: ${concurrentJobs}`);
 
     scrapeQueue().process(concurrentJobs, async (job) => {
@@ -179,15 +231,68 @@ async function initializeWorker() {
     console.log("\n✓ All queue processors initialized");
     console.log("========================================\n");
 
+    // Clear queue history if requested
+    if (process.env.CLEAR_QUEUE_HISTORY_ON_STARTUP === "true") {
+      await clearQueueHistory();
+    }
+
     // Check for waiting jobs in Redis
     await checkQueueStatus();
 
     // Scan database for pending sources and add them to the queue
     await processPendingSources();
-
   } catch (error: any) {
     console.error("\n✗ Failed to initialize worker:", error.message);
     throw error;
+  }
+}
+
+// Clear queue history (completed and failed jobs)
+async function clearQueueHistory() {
+  console.log("\n========================================");
+  console.log("Clearing Queue History");
+  console.log("========================================\n");
+
+  try {
+    // Get initial counts
+    const [scrapeCounts, embedCounts, updateCounts] = await Promise.all([
+      scrapeQueue().getJobCounts(),
+      embedQueue().getJobCounts(),
+      updateQueue().getJobCounts(),
+    ]);
+
+    const totalCompleted =
+      scrapeCounts.completed + embedCounts.completed + updateCounts.completed;
+    const totalFailed =
+      scrapeCounts.failed + embedCounts.failed + updateCounts.failed;
+
+    console.log(
+      `Found ${totalCompleted} completed jobs and ${totalFailed} failed jobs to clear`
+    );
+
+    if (totalCompleted === 0 && totalFailed === 0) {
+      console.log("✓ No history to clear");
+      return;
+    }
+
+    // Clear completed jobs
+    await Promise.all([
+      scrapeQueue().clean(0, "completed"),
+      embedQueue().clean(0, "completed"),
+      updateQueue().clean(0, "completed"),
+    ]);
+
+    // Clear failed jobs
+    await Promise.all([
+      scrapeQueue().clean(0, "failed"),
+      embedQueue().clean(0, "failed"),
+      updateQueue().clean(0, "failed"),
+    ]);
+
+    console.log("✓ Queue history cleared successfully");
+    console.log("========================================\n");
+  } catch (error: any) {
+    console.error("Failed to clear queue history:", error.message);
   }
 }
 
@@ -223,7 +328,10 @@ async function checkQueueStatus() {
     console.log(`  Failed:    ${updateJobCounts.failed}`);
     console.log(`  Delayed:   ${updateJobCounts.delayed}`);
 
-    const totalWaiting = scrapeJobCounts.waiting + embedJobCounts.waiting + updateJobCounts.waiting;
+    const totalWaiting =
+      scrapeJobCounts.waiting +
+      embedJobCounts.waiting +
+      updateJobCounts.waiting;
     if (totalWaiting > 0) {
       console.log(`\n⏳ ${totalWaiting} job(s) waiting to be processed`);
     } else {
@@ -246,14 +354,14 @@ async function processPendingSources() {
     // Find all sources with PENDING status
     const pendingSources = await prisma.source.findMany({
       where: {
-        status: 'PENDING'
+        status: "PENDING",
       },
       select: {
         id: true,
         url: true,
         name: true,
-        createdAt: true
-      }
+        createdAt: true,
+      },
     });
 
     if (pendingSources.length === 0) {
@@ -262,7 +370,9 @@ async function processPendingSources() {
       return;
     }
 
-    console.log(`Found ${pendingSources.length} pending source(s) in database:\n`);
+    console.log(
+      `Found ${pendingSources.length} pending source(s) in database:\n`
+    );
 
     // Add each pending source to the queue (but skip if already has an active job)
     for (const source of pendingSources) {
@@ -274,12 +384,14 @@ async function processPendingSources() {
       const existingJob = await prisma.job.findFirst({
         where: {
           sourceId: source.id,
-          status: { in: ['PENDING', 'RUNNING'] }
-        }
+          status: { in: ["PENDING", "RUNNING"] },
+        },
       });
 
       if (existingJob) {
-        console.log(`    ⊘ Skipping - already has active job (${existingJob.status})\n`);
+        console.log(
+          `    ⊘ Skipping - already has active job (${existingJob.status})\n`
+        );
         continue;
       }
 
@@ -323,16 +435,19 @@ async function startWorker() {
     // Step 2: Check Redis connection
     await checkRedisConnection();
 
-    // Step 3: Initialize worker and queues
+    // Step 3: Check embedding provider configuration
+    await checkEmbeddingConfig();
+
+    // Step 4: Initialize worker and queues
     await initializeWorker();
 
-    // Step 4: Start periodic queue monitoring
+    // Step 5: Start periodic queue monitoring
     startQueueMonitoring();
 
-    // Step 5: Start the automatic rescrape scheduler
+    // Step 6: Start the automatic rescrape scheduler
     const schedulerTask = startScheduler();
 
-    // Step 6: Start the batch embedding polling worker
+    // Step 7: Start the batch embedding polling worker
     const batchPollingTask = startBatchPollingWorker();
 
     console.log("\n✅ Worker is running and ready to process jobs!");
@@ -354,12 +469,14 @@ let tasks: {
   batchPollingTask: ReturnType<typeof startBatchPollingWorker>;
 };
 
-startWorker().then((result) => {
-  tasks = result;
-}).catch(error => {
-  console.error("Fatal error:", error);
-  process.exit(1);
-});
+startWorker()
+  .then((result) => {
+    tasks = result;
+  })
+  .catch((error) => {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
 
 // Graceful shutdown
 process.on("SIGTERM", async () => {

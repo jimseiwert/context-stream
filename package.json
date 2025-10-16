@@ -9,7 +9,9 @@
     "deploy": "prisma migrate deploy && next start",
     "lint": "next lint",
     "worker": "NODE_OPTIONS='--max-old-space-size=2048' tsx src/lib/jobs/worker.ts",
+    "worker:clean": "NODE_OPTIONS='--max-old-space-size=2048' CLEAR_QUEUE_HISTORY_ON_STARTUP=true tsx src/lib/jobs/worker.ts",
     "jobs:clear": "tsx local_scripts/clear-jobs.ts",
+    "jobs:clear-history": "tsx local_scripts/clear-queue-history.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma generate && prisma migrate deploy",
@@ -23,6 +25,7 @@
     "user:upgrade": "tsx scripts/upgrade-user-plan.ts",
     "db:studio": "prisma studio",
     "db:format": "prisma format",
+    "generate-encryption-key": "tsx scripts/generate-encryption-key.ts",
     "prepare": "node -e \"try { require('husky').install() } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e }\"",
     "setup:hooks": "bash scripts/setup-hooks.sh"
   },

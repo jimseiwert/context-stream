@@ -1,13 +1,13 @@
 /**
- * OpenAI Batch Embeddings API
+ * Batch Embeddings API
  *
- * This module handles batch embedding generation using OpenAI's Batch API
+ * This module handles batch embedding generation using provider Batch APIs
  * for 50% cost savings compared to real-time embeddings.
  *
  * Workflow:
  * 1. Collect page chunks that need embeddings
  * 2. Create a JSONL file with batch requests
- * 3. Upload file to OpenAI
+ * 3. Upload file to provider
  * 4. Create batch job
  * 5. Poll for completion (typically 24 hours)
  * 6. Download results and update database
@@ -21,19 +21,16 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { chunkText } from './chunker';
 import { createChunks } from '@/lib/db/queries/chunks';
-
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { getActiveEmbeddingConfig } from './config';
 
 export interface BatchEmbeddingRequest {
   custom_id: string;  // pageId:chunkIndex
   method: "POST";
   url: "/v1/embeddings";
   body: {
-    model: "text-embedding-3-small";
+    model: string;
     input: string;
-    dimensions: 1536;
+    dimensions: number;
   };
 }
 
@@ -57,6 +54,26 @@ export interface BatchEmbeddingResponse {
  */
 export async function createBatchEmbeddingJob(sourceId: string): Promise<string> {
   console.log(`[Batch] Creating batch embedding job for source: ${sourceId}`);
+
+  // Load active provider configuration
+  const config = await getActiveEmbeddingConfig();
+
+  // Currently only OpenAI and Azure OpenAI support batch API
+  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+    throw new Error(`Batch API not supported for provider: ${config.provider}`);
+  }
+
+  // Create OpenAI client with config
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
+      ? {
+          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
+          defaultQuery: { 'api-version': '2024-06-01' },
+          defaultHeaders: { 'api-key': config.apiKey },
+        }
+      : {}),
+  });
 
   // 1. Get all pages from the source that need embeddings
   const pages = await prisma.page.findMany({
@@ -100,15 +117,15 @@ export async function createBatchEmbeddingJob(sourceId: string): Promise<string>
         method: "POST",
         url: "/v1/embeddings",
         body: {
-          model: "text-embedding-3-small",
+          model: config.model,
           input: chunks[chunkIndex].content,
-          dimensions: 1536,
+          dimensions: config.dimensions,
         },
       });
     }
   }
 
-  console.log(`[Batch] Created ${requests.length} embedding requests`);
+  console.log(`[Batch] Created ${requests.length} embedding requests for ${config.provider}`);
 
   // 3. Write requests to JSONL file
   const jsonl = requests.map(req => JSON.stringify(req)).join('\n');
@@ -118,8 +135,8 @@ export async function createBatchEmbeddingJob(sourceId: string): Promise<string>
   console.log(`[Batch] Wrote batch file: ${tempFilePath}`);
 
   try {
-    // 4. Upload file to OpenAI
-    console.log(`[Batch] Uploading batch file to OpenAI...`);
+    // 4. Upload file to provider
+    console.log(`[Batch] Uploading batch file to ${config.provider}...`);
     const file = await client.files.create({
       file: createReadStream(tempFilePath) as any,
       purpose: 'batch',
@@ -168,6 +185,26 @@ export async function createBatchEmbeddingJob(sourceId: string): Promise<string>
  * Check the status of a batch job
  */
 export async function checkBatchStatus(batchId: string) {
+  // Load active provider configuration
+  const config = await getActiveEmbeddingConfig();
+
+  // Currently only OpenAI and Azure OpenAI support batch API
+  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+    throw new Error(`Batch API not supported for provider: ${config.provider}`);
+  }
+
+  // Create OpenAI client with config
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
+      ? {
+          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
+          defaultQuery: { 'api-version': '2024-06-01' },
+          defaultHeaders: { 'api-key': config.apiKey },
+        }
+      : {}),
+  });
+
   const batch = await client.batches.retrieve(batchId);
 
   console.log(`[Batch] Status for ${batchId}:`);
@@ -183,6 +220,26 @@ export async function checkBatchStatus(batchId: string) {
  */
 export async function processBatchResults(batchId: string) {
   console.log(`[Batch] Processing results for batch: ${batchId}`);
+
+  // Load active provider configuration
+  const config = await getActiveEmbeddingConfig();
+
+  // Currently only OpenAI and Azure OpenAI support batch API
+  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+    throw new Error(`Batch API not supported for provider: ${config.provider}`);
+  }
+
+  // Create OpenAI client with config
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
+      ? {
+          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
+          defaultQuery: { 'api-version': '2024-06-01' },
+          defaultHeaders: { 'api-key': config.apiKey },
+        }
+      : {}),
+  });
 
   // 1. Retrieve batch info
   const batch = await client.batches.retrieve(batchId);
@@ -348,6 +405,26 @@ export async function processBatchResults(batchId: string) {
 export async function cancelBatchJob(batchId: string) {
   console.log(`[Batch] Canceling batch: ${batchId}`);
 
+  // Load active provider configuration
+  const config = await getActiveEmbeddingConfig();
+
+  // Currently only OpenAI and Azure OpenAI support batch API
+  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+    throw new Error(`Batch API not supported for provider: ${config.provider}`);
+  }
+
+  // Create OpenAI client with config
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
+      ? {
+          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
+          defaultQuery: { 'api-version': '2024-06-01' },
+          defaultHeaders: { 'api-key': config.apiKey },
+        }
+      : {}),
+  });
+
   const batch = await client.batches.cancel(batchId);
 
   await prisma.$executeRaw`
@@ -364,6 +441,26 @@ export async function cancelBatchJob(batchId: string) {
  * List all batch jobs with a specific status
  */
 export async function listBatchJobs(status?: string) {
+  // Load active provider configuration
+  const config = await getActiveEmbeddingConfig();
+
+  // Currently only OpenAI and Azure OpenAI support batch API
+  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+    throw new Error(`Batch API not supported for provider: ${config.provider}`);
+  }
+
+  // Create OpenAI client with config
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
+      ? {
+          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
+          defaultQuery: { 'api-version': '2024-06-01' },
+          defaultHeaders: { 'api-key': config.apiKey },
+        }
+      : {}),
+  });
+
   const batches = await client.batches.list({
     limit: 100,
   });

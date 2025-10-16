@@ -68,6 +68,11 @@ export class RobotsParser {
           rules.disallow.push(value)
         } else if (lowerKey === 'allow') {
           rules.allow.push(value)
+        } else if (lowerKey === 'crawl-delay') {
+          const delay = parseFloat(value)
+          if (!isNaN(delay) && delay > 0) {
+            rules.crawlDelay = delay
+          }
         }
       }
     }
@@ -78,6 +83,18 @@ export class RobotsParser {
     }
 
     return rules
+  }
+
+  /**
+   * Get crawl-delay from loaded rules (returns first non-undefined crawl-delay found)
+   */
+  getCrawlDelay(): number | undefined {
+    for (const rules of this.rules.values()) {
+      if (rules.crawlDelay !== undefined) {
+        return rules.crawlDelay
+      }
+    }
+    return undefined
   }
 
   /**
@@ -143,4 +160,5 @@ export class RobotsParser {
 interface RobotRules {
   allow: string[]
   disallow: string[]
+  crawlDelay?: number // Crawl-delay in seconds
 }

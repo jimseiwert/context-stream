@@ -30,7 +30,6 @@ export interface SearchResult {
 }
 
 export class HybridSearch {
-  private embeddingProvider = getEmbeddingProvider();
 
   /**
    * Perform hybrid search (BM25 + vector similarity)
@@ -164,8 +163,11 @@ export class HybridSearch {
    */
   private async vectorSearch(query: string, sourceIds: string[]) {
     try {
+      // Get embedding provider on-demand
+      const embeddingProvider = await getEmbeddingProvider();
+
       // Generate query embedding
-      const embeddings = await this.embeddingProvider.generateEmbeddings([
+      const embeddings = await embeddingProvider.generateEmbeddings([
         query,
       ]);
       const queryVector = embeddings[0];
@@ -345,7 +347,7 @@ export async function hybridSearch(
   excludePageIds: string[] = [],
   limit = 50
 ): Promise<RerankableResult[]> {
-  const embeddingProvider = getEmbeddingProvider();
+  const embeddingProvider = await getEmbeddingProvider();
 
   // Build search query from keywords
   const searchQuery = parsed.keywords.join(" ");

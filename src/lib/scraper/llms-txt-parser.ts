@@ -21,18 +21,41 @@ export class LlmsTxtParser {
 
   /**
    * Check for and parse llms.txt files
+   * Priority:
+   * 1. startUrl/llms-full.txt (path-specific complete content)
+   * 2. startUrl/llms.txt (path-specific summary)
+   * 3. domain/llms-full.txt (domain-level complete content)
+   * 4. domain/llms.txt (domain-level summary)
    */
-  async check(baseUrl: string): Promise<LlmsTxtResult> {
-    // Try llms-full.txt first (complete content)
-    const fullResult = await this.fetchLlmsTxt(baseUrl, 'llms-full.txt')
-    if (fullResult.found) {
-      return fullResult
+  async check(startUrl: string, domainUrl?: string): Promise<LlmsTxtResult> {
+    // If startUrl and domainUrl are different (path-specific), try path first
+    if (domainUrl && startUrl !== domainUrl && !startUrl.endsWith('/')) {
+      // Try path-specific llms-full.txt first
+      const pathFullResult = await this.fetchLlmsTxt(startUrl, 'llms-full.txt')
+      if (pathFullResult.found) {
+        return pathFullResult
+      }
+
+      // Try path-specific llms.txt
+      const pathSummaryResult = await this.fetchLlmsTxt(startUrl, 'llms.txt')
+      if (pathSummaryResult.found) {
+        return pathSummaryResult
+      }
     }
 
-    // Try llms.txt (summary + links)
-    const summaryResult = await this.fetchLlmsTxt(baseUrl, 'llms.txt')
-    if (summaryResult.found) {
-      return summaryResult
+    // Fall back to domain-level files
+    const baseUrl = domainUrl || startUrl
+
+    // Try domain llms-full.txt
+    const domainFullResult = await this.fetchLlmsTxt(baseUrl, 'llms-full.txt')
+    if (domainFullResult.found) {
+      return domainFullResult
+    }
+
+    // Try domain llms.txt
+    const domainSummaryResult = await this.fetchLlmsTxt(baseUrl, 'llms.txt')
+    if (domainSummaryResult.found) {
+      return domainSummaryResult
     }
 
     return { found: false }
