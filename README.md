@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Pulls](https://img.shields.io/docker/pulls/jimseiwert/context-stream)](https://hub.docker.com/r/jimseiwert/context-stream)
-[![GitHub Stars](https://img.shields.io/github/stars/yourusername/context-stream?style=social)](https://github.com/yourusername/context-stream)
+[![GitHub Stars](https://img.shields.io/github/stars/jimseiwert/context-stream?style=social)](https://github.com/jimseiwert/context-stream)
 
 **ContextStream** is an open-source platform that brings the power of AI-driven semantic search to your documentation. Whether you're building an internal knowledge base, indexing your company's docs, or just want to search through your favorite frameworks' documentation faster, ContextStream has you covered.
 
@@ -27,7 +27,7 @@ ContextStream is **free and open-source**, but hosting, development, and mainten
 ### 🌟 Ways to Support
 
 - **Star this repo** - It helps with visibility!
-- **Sponsor on GitHub** - [Become a sponsor](https://github.com/sponsors/yourusername) to help keep this project alive
+- **Sponsor on GitHub** - [Become a sponsor](https://github.com/sponsors/jimseiwert) to help keep this project alive
 - **Share** - Tell others about ContextStream
 - **Contribute** - Code, docs, bug reports, and ideas are all welcome!
 
@@ -51,7 +51,7 @@ Get up and running in under 5 minutes!
 
 ```bash
 # Download docker-compose file
-curl -o docker-compose.yml https://raw.githubusercontent.com/yourusername/context-stream/main/docker/docker-compose.bundle.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/jimseiwert/context-stream/main/docker/docker-compose.production.yml
 
 # Create environment file
 cat > .env << EOF
@@ -79,17 +79,6 @@ That's it! You now have your own AI-powered documentation search engine running 
 ## 🐳 Deployment Options
 
 Choose the deployment that fits your needs:
-
-### Bundle (Easiest)
-Perfect for getting started or small teams. Everything in one container.
-
-```bash
-docker run -d \
-  -e OPENAI_API_KEY=your-key \
-  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
-  -p 3000:3000 \
-  jimseiwert/context-stream:bundle-latest
-```
 
 ### Docker Compose (Recommended)
 Production-ready setup with separate services for better performance.
@@ -147,7 +136,7 @@ Check out our [Contributing Guide](CONTRIBUTING.md) for more details.
 
 ### Good First Issues
 
-New to the project? Look for issues tagged with [`good first issue`](https://github.com/yourusername/context-stream/labels/good%20first%20issue) - these are great starting points!
+New to the project? Look for issues tagged with [`good first issue`](https://github.com/jimseiwert/context-stream/labels/good%20first%20issue) - these are great starting points!
 
 ## 🔧 Development Setup
 
@@ -155,7 +144,7 @@ Want to contribute or run locally? Here's how:
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/context-stream.git
+git clone https://github.com/jimseiwert/context-stream.git
 cd context-stream
 
 # Install dependencies
@@ -202,20 +191,20 @@ Exciting features on the horizon:
 - [ ] Plugin system for custom integrations
 - [ ] Self-hosted LLM support (Ollama, LM Studio)
 
-Have an idea? [Open an issue](https://github.com/yourusername/context-stream/issues/new) or start a [discussion](https://github.com/yourusername/context-stream/discussions)!
+Have an idea? [Open an issue](https://github.com/jimseiwert/context-stream/issues/new) or start a [discussion](https://github.com/jimseiwert/context-stream/discussions)!
 
 ## 📊 Project Stats
 
-- **Stars**: ⭐ [Star us on GitHub](https://github.com/yourusername/context-stream)
+- **Stars**: ⭐ [Star us on GitHub](https://github.com/jimseiwert/context-stream)
 - **Docker Pulls**: 🐳 Check out our [Docker Hub](https://hub.docker.com/r/jimseiwert/context-stream)
-- **Contributors**: 👥 See all our amazing [contributors](https://github.com/yourusername/context-stream/graphs/contributors)
+- **Contributors**: 👥 See all our amazing [contributors](https://github.com/jimseiwert/context-stream/graphs/contributors)
 
 ## 💬 Community & Support
 
 Join our community and get help:
 
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/context-stream/discussions) - Ask questions, share ideas
-- **Issues**: [GitHub Issues](https://github.com/yourusername/context-stream/issues) - Bug reports and feature requests
+- **Discussions**: [GitHub Discussions](https://github.com/jimseiwert/context-stream/discussions) - Ask questions, share ideas
+- **Issues**: [GitHub Issues](https://github.com/jimseiwert/context-stream/issues) - Bug reports and feature requests
 - **Email**: support@contextstream.dev - Direct support
 - **Discord**: Coming soon! 🎮
 
@@ -231,7 +220,7 @@ ContextStream wouldn't be possible without these amazing open-source projects:
 - [TailwindCSS](https://tailwindcss.com/) - Utility-first CSS framework
 - [shadcn/ui](https://ui.shadcn.com/) - Beautiful UI components
 
-And a huge thanks to all our [contributors](https://github.com/yourusername/context-stream/graphs/contributors)! 🎉
+And a huge thanks to all our [contributors](https://github.com/jimseiwert/context-stream/graphs/contributors)! 🎉
 
 ## 📄 License
 
@@ -241,7 +230,7 @@ You're free to use, modify, and distribute this software. See the LICENSE file f
 
 ## 🌟 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/context-stream&type=Date)](https://star-history.com/#yourusername/context-stream&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=jimseiwert/context-stream&type=Date)](https://star-history.com/#jimseiwert/context-stream&Date)
 
 ---
 
@@ -249,6 +238,6 @@ You're free to use, modify, and distribute this software. See the LICENSE file f
 
 **Made with ❤️ by the open-source community**
 
-[⭐ Star this repo](https://github.com/yourusername/context-stream) • [🐦 Follow updates](https://twitter.com/yourusername) • [💬 Join discussions](https://github.com/yourusername/context-stream/discussions)
+[⭐ Star this repo](https://github.com/jimseiwert/context-stream) • [🐦 Follow updates](https://twitter.com/jimseiwert) • [💬 Join discussions](https://github.com/jimseiwert/context-stream/discussions)
 
 </div>

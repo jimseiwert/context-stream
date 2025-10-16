@@ -41,4 +41,4 @@ IMPORTANT: Make sure to configure your secrets in values.yaml:
   - BETTER_AUTH_SECRET
   - NEXTAUTH_SECRET
 
-For more information, visit: https://github.com/yourusername/context-stream
+For more information, visit: https://github.com/jimseiwert/context-stream

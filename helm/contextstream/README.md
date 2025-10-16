@@ -28,7 +28,7 @@ helm install contextstream contextstream/contextstream \
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/context-stream.git
+git clone https://github.com/jimseiwert/context-stream.git
 cd context-stream/helm
 
 # Install the chart
@@ -45,7 +45,7 @@ Create a `values.yaml` file:
 ```yaml
 image:
   registry: ghcr.io
-  repository: yourusername/context-stream
+  repository: jimseiwert/context-stream
   tag: "latest"
 
 ingress:
@@ -123,7 +123,7 @@ The following table lists the configurable parameters of the ContextStream chart
 | `replicaCount.app` | Number of app replicas | `2` |
 | `replicaCount.worker` | Number of worker replicas | `1` |
 | `image.registry` | Image registry | `ghcr.io` |
-| `image.repository` | Image repository | `yourusername/context-stream` |
+| `image.repository` | Image repository | `jimseiwert/context-stream` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `image.tag` | Image tag | `""` (defaults to Chart.AppVersion) |
 
@@ -261,4 +261,4 @@ kubectl logs -l app.kubernetes.io/component=app --tail=100 | grep prisma
 
 ## Support
 
-For issues and questions, please visit: https://github.com/yourusername/context-stream/issues
+For issues and questions, please visit: https://github.com/jimseiwert/context-stream/issues

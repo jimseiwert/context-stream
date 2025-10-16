@@ -7,6 +7,7 @@
 
 export const dynamic = "force-dynamic";
 
+import { PublicFooter } from "@/components/layout/public-footer";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useCreateCheckout } from "@/hooks/use-subscription";
+import { useSession } from "@/lib/auth/client";
 import { PlanTier } from "@prisma/client";
 import {
   AlertTriangle,
@@ -32,8 +34,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { useSession } from "@/lib/auth/client";
-import { PublicFooter } from "@/components/layout/public-footer";
 
 const PLANS = [
   {
@@ -185,7 +185,11 @@ function PricingCard({
             <Link href="/register">Get Started Free</Link>
           </Button>
         ) : !isLoggedIn ? (
-          <Button className="w-full" variant={plan.popular ? "default" : "outline"} asChild>
+          <Button
+            className="w-full"
+            variant={plan.popular ? "default" : "outline"}
+            asChild
+          >
             <Link href="/register">Get Started with {plan.name}</Link>
           </Button>
         ) : (
@@ -252,139 +256,143 @@ export default function PricingPage() {
 
       {/* Main Content */}
       <div className="flex-1 container mx-auto px-4 py-16">
-      <div className="text-center max-w-3xl mx-auto mb-16">
-        <h1 className="text-4xl font-bold mb-4">Simple, Transparent Pricing</h1>
-        <p className="text-xl text-muted-foreground mb-8">
-          Choose the plan that's right for you. All plans include access to our
-          core features.
-        </p>
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <h1 className="text-4xl font-bold mb-4">
+            Simple, Transparent Pricing
+          </h1>
+          <p className="text-xl text-muted-foreground mb-8">
+            Choose the plan that's right for you. All plans include access to
+            our core features.
+          </p>
 
-        {error && (
-          <Alert variant="destructive" className="mb-8">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+          {error && (
+            <Alert variant="destructive" className="mb-8">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <Alert className="text-left">
+            <AlertDescription>
+              <strong>Self-Hosted?</strong> Deploy Context Stream on your own
+              infrastructure with unlimited usage. Check out our{" "}
+              <Link
+                href="https://github.com/jimseiwert/context-stream"
+                className="underline"
+              >
+                GitHub repository
+              </Link>{" "}
+              for installation instructions.
+            </AlertDescription>
           </Alert>
-        )}
+        </div>
 
-        <Alert className="text-left">
-          <AlertDescription>
-            <strong>Self-Hosted?</strong> Deploy Context Stream on your own
-            infrastructure with unlimited usage. Check out our{" "}
-            <Link
-              href="https://github.com/yourusername/context-stream"
-              className="underline"
-            >
-              GitHub repository
-            </Link>{" "}
-            for installation instructions.
-          </AlertDescription>
-        </Alert>
-      </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
+          {PLANS.map((plan) => (
+            <PricingCard
+              key={plan.tier}
+              plan={plan}
+              isLoading={createCheckout.isPending}
+              isLoggedIn={isLoggedIn}
+              onSelect={handleSelectPlan}
+            />
+          ))}
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
-        {PLANS.map((plan) => (
-          <PricingCard
-            key={plan.tier}
-            plan={plan}
-            isLoading={createCheckout.isPending}
-            isLoggedIn={isLoggedIn}
-            onSelect={handleSelectPlan}
-          />
-        ))}
-      </div>
+        <div className="mt-16 max-w-3xl mx-auto">
+          <Card>
+            <CardHeader>
+              <CardTitle>Enterprise</CardTitle>
+              <CardDescription>
+                Need custom limits, dedicated support, or on-premise deployment?
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 mb-6">
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">
+                    Unlimited searches, sources, and workspaces
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Dedicated support channel</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Custom deployment options</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">SLA guarantees</span>
+                </li>
+              </ul>
+            </CardContent>
+            <CardFooter>
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="https://github.com/jimseiwert/context-stream/issues/new?template=enterprise.md">
+                  Contact Us
+                </Link>
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
 
-      <div className="mt-16 max-w-3xl mx-auto">
-        <Card>
-          <CardHeader>
-            <CardTitle>Enterprise</CardTitle>
-            <CardDescription>
-              Need custom limits, dedicated support, or on-premise deployment?
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2 mb-6">
-              <li className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-sm">
-                  Unlimited searches, sources, and workspaces
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-sm">Dedicated support channel</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-sm">Custom deployment options</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-sm">SLA guarantees</span>
-              </li>
-            </ul>
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="https://github.com/yourusername/context-stream/issues/new?template=enterprise.md">
-                Contact Us
-              </Link>
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
+        <Separator className="my-16" />
 
-      <Separator className="my-16" />
-
-      <div className="max-w-3xl mx-auto">
-        <h2 className="text-2xl font-bold mb-6 text-center">
-          Frequently Asked Questions
-        </h2>
-        <div className="space-y-6">
-          <div>
-            <h3 className="font-semibold mb-2">
-              What happens if I exceed my quota?
-            </h3>
-            <p className="text-muted-foreground">
-              You&apos;ll receive warnings as you approach your limits. Once you
-              reach your quota, you&apos;ll be prompted to upgrade to a higher
-              plan to continue using the service.
-            </p>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2">
-              Can I change plans at any time?
-            </h3>
-            <p className="text-muted-foreground">
-              Yes! You can upgrade or downgrade your plan at any time. Changes
-              take effect at the start of your next billing cycle.
-            </p>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2">Do you offer refunds?</h3>
-            <p className="text-muted-foreground">
-              We offer a 14-day money-back guarantee on all paid plans. If
-              you're not satisfied, contact us for a full refund.
-            </p>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2">
-              What payment methods do you accept?
-            </h3>
-            <p className="text-muted-foreground">
-              We accept all major credit cards and debit cards through Stripe.
-              Enterprise customers can arrange invoicing.
-            </p>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2">Is self-hosting really free?</h3>
-            <p className="text-muted-foreground">
-              Yes! Context Stream is open source and free to self-host with
-              unlimited usage. You only pay for your own infrastructure costs
-              (server, database, etc.).
-            </p>
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-2xl font-bold mb-6 text-center">
+            Frequently Asked Questions
+          </h2>
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-semibold mb-2">
+                What happens if I exceed my quota?
+              </h3>
+              <p className="text-muted-foreground">
+                You&apos;ll receive warnings as you approach your limits. Once
+                you reach your quota, you&apos;ll be prompted to upgrade to a
+                higher plan to continue using the service.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">
+                Can I change plans at any time?
+              </h3>
+              <p className="text-muted-foreground">
+                Yes! You can upgrade or downgrade your plan at any time. Changes
+                take effect at the start of your next billing cycle.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">Do you offer refunds?</h3>
+              <p className="text-muted-foreground">
+                We offer a 14-day money-back guarantee on all paid plans. If
+                you're not satisfied, contact us for a full refund.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">
+                What payment methods do you accept?
+              </h3>
+              <p className="text-muted-foreground">
+                We accept all major credit cards and debit cards through Stripe.
+                Enterprise customers can arrange invoicing.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">
+                Is self-hosting really free?
+              </h3>
+              <p className="text-muted-foreground">
+                Yes! Context Stream is open source and free to self-host with
+                unlimited usage. You only pay for your own infrastructure costs
+                (server, database, etc.).
+              </p>
+            </div>
           </div>
         </div>
-      </div>
       </div>
 
       {/* Footer */}

@@ -9,9 +9,9 @@ keywords:
   - documentation
   - ai
   - search
-home: https://github.com/yourusername/context-stream
+home: https://github.com/jimseiwert/context-stream
 sources:
-  - https://github.com/yourusername/context-stream
+  - https://github.com/jimseiwert/context-stream
 maintainers:
   - name: ContextStream Team
     email: support@contextstream.dev

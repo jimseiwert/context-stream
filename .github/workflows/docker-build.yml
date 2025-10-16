@@ -36,9 +36,6 @@ jobs:
           - dockerfile: docker/Dockerfile.worker
             image: worker
             context: .
-          - dockerfile: docker/Dockerfile.bundle
-            image: bundle
-            context: .
 
     steps:
       - name: Checkout repository
