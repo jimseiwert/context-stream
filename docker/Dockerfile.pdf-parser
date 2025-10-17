@@ -10,13 +10,13 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY services/pdf-parser/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY main.py .
+COPY services/pdf-parser/main.py .
 
 # Expose port
 EXPOSE 8001
