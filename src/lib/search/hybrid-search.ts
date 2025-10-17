@@ -556,7 +556,7 @@ export async function hybridSearch(
       pageId: doc.id,
       title: doc.filename,
       url: `${doc.source.url}/documents/${doc.id}`, // Generate a URL for the document
-      content: doc.content || "",
+      content: doc.contentText || "",
       source: {
         id: doc.source.id,
         name: doc.source.name || doc.source.domain,

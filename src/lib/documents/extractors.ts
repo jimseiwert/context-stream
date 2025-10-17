@@ -173,15 +173,12 @@ async function extractDOCX(buffer: Buffer): Promise<ExtractionResult> {
   try {
     const result = await mammoth.extractRawText({ buffer })
 
-    // Extract images if present
-    const imageResult = await mammoth.images.imgElement(async (image) => {
-      // Images will be processed separately by the image processor
-      return { src: '' }
-    }).convertToHtml({ buffer })
-
     const metadata: ExtractionResult['metadata'] = {
       pages: Math.ceil(result.value.length / 3000), // Rough page count
     }
+
+    // TODO: Extract images from DOCX for separate processing
+    // Images can be extracted using mammoth.convertToHtml with custom image handlers
 
     return {
       text: result.value.trim(),

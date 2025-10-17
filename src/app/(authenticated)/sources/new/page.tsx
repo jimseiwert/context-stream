@@ -147,7 +147,11 @@ export default function NewSourcePage() {
           description: "You can now upload documents to this collection.",
         });
         // Redirect to the source detail page for document uploads
-        router.push(`/sources/${result.source.id}`);
+        if (result.source?.id) {
+          router.push(`/sources/${result.source.id}`);
+        } else {
+          router.push("/sources");
+        }
       } else if (result.isGlobal || data.scope === "GLOBAL") {
         toast.success("Global source created!", {
           description:

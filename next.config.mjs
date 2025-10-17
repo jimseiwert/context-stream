@@ -1,9 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['pdf-parse'],
-  //  nodeMiddleware: true, // Enable Node.js middleware
-  },
+  serverExternalPackages: ['pdf-parse'],
   reactStrictMode: true,
   output: "standalone",
   images: {

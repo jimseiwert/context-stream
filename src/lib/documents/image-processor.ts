@@ -190,7 +190,7 @@ async function processWithAzureVision(
         'Content-Type': 'application/octet-stream',
         'Ocp-Apim-Subscription-Key': config.apiKey,
       },
-      body: imageBuffer,
+      body: new Uint8Array(imageBuffer),
     })
 
     if (!submitResponse.ok) {

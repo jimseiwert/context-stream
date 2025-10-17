@@ -55,7 +55,7 @@ export async function parsePDF(buffer: Buffer): Promise<PDFData> {
 
     // Create form data with the PDF buffer
     const formData = new FormData()
-    const blob = new Blob([buffer], { type: 'application/pdf' })
+    const blob = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' })
     formData.append('file', blob, 'document.pdf')
 
     // Call the PDF parser service

@@ -147,6 +147,23 @@ export class DocumentPipelineProcessor {
 
       // 6. Create document record
       this.reportProgress('saving')
+      // Serialize metadata to ensure JSON compatibility (convert Dates to ISO strings)
+      const serializedMetadata = extraction.metadata ? {
+        ...extraction.metadata,
+        createdDate: extraction.metadata.createdDate instanceof Date
+          ? extraction.metadata.createdDate.toISOString()
+          : extraction.metadata.createdDate,
+        images: extraction.metadata.images?.map((img: any) => ({
+          ...img,
+          buffer: undefined, // Remove buffer from metadata
+        })),
+        imagesProcessed,
+        uploadedBy: this.options.uploadedBy,
+      } : {
+        imagesProcessed,
+        uploadedBy: this.options.uploadedBy,
+      }
+
       const document = await prisma.document.create({
         data: {
           sourceId: this.options.sourceId,
@@ -155,11 +172,7 @@ export class DocumentPipelineProcessor {
           size: this.options.buffer.length,
           contentText: fullText,
           checksum,
-          metadata: {
-            ...extraction.metadata,
-            imagesProcessed,
-            uploadedBy: this.options.uploadedBy,
-          },
+          metadata: serializedMetadata,
           indexedAt: new Date(),
         },
       })
