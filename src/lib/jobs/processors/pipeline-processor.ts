@@ -91,6 +91,13 @@ export class PipelineProcessor {
   private embedQueue: PageTask[] = [];
   private saveQueue: PageTask[] = [];
 
+  // MEMORY FIX: Queue size limits to prevent memory overflow
+  // When downstream queues are full, upstream workers pause to create backpressure
+  // Lower limits to prevent memory buildup - better to pause than accumulate
+  private readonly MAX_EMBED_QUEUE_SIZE = 20; // Max 20 pages waiting for embedding
+  private readonly MAX_EXTRACT_QUEUE_SIZE = 50; // Max 50 pages waiting for extraction
+  private readonly MAX_FETCH_QUEUE_SIZE = 100; // Max 100 pages in fetch queue
+
   private isProcessing = false;
   private isCancelled = false;
   private config: PipelineConfig;
@@ -122,10 +129,11 @@ export class PipelineProcessor {
   constructor(config: PipelineConfig) {
     // Store config with defaults
     // Note: Concurrency will be adjusted after bot protection detection in process()
+    // MEMORY FIX: Reduced embedding concurrency to 1 since we share a single provider instance
     this.config = {
       fetchConcurrency: 5,
       extractConcurrency: 3,
-      embeddingConcurrency: 2,
+      embeddingConcurrency: 1, // Reduced from 2 to 1 due to shared provider
       saveConcurrency: 3,
       ...config,
     };
@@ -138,10 +146,52 @@ export class PipelineProcessor {
   }
 
   /**
+   * MEMORY FIX: Monitor queue sizes and log warnings
+   */
+  private startQueueMonitoring() {
+    const monitorInterval = setInterval(() => {
+      if (!this.isProcessing) {
+        clearInterval(monitorInterval);
+        return;
+      }
+
+      const embedQueueSize = this.embedQueue.length;
+      const extractQueueSize = this.extractQueue.length;
+
+      // Warn if queues are getting large
+      if (embedQueueSize > this.MAX_EMBED_QUEUE_SIZE * 0.8) {
+        console.warn(`[Pipeline] ⚠️  Embed queue high: ${embedQueueSize}/${this.MAX_EMBED_QUEUE_SIZE} (backpressure active)`);
+      }
+      if (extractQueueSize > this.MAX_EXTRACT_QUEUE_SIZE * 0.8) {
+        console.warn(`[Pipeline] ⚠️  Extract queue high: ${extractQueueSize}/${this.MAX_EXTRACT_QUEUE_SIZE} (backpressure active)`);
+      }
+
+      // Log progress every 30 seconds with memory-friendly queue stats
+      const progress = this.getProgress();
+      const fetchQueueSize = this.fetchQueue.length;
+      console.log(`[Pipeline] Queue status: queued=${fetchQueueSize}/${this.MAX_FETCH_QUEUE_SIZE}, fetching=${progress.fetching}, extract=${progress.extracting}/${this.MAX_EXTRACT_QUEUE_SIZE}, embed=${progress.embedding}/${this.MAX_EMBED_QUEUE_SIZE}, save=${progress.saving}, completed=${progress.completed}/${progress.total}`);
+
+      // Log active backpressure
+      if (embedQueueSize >= this.MAX_EMBED_QUEUE_SIZE) {
+        console.log(`[Pipeline] 🛑 Backpressure: Extraction paused (embed queue full)`);
+      }
+      if (extractQueueSize >= this.MAX_EXTRACT_QUEUE_SIZE) {
+        console.log(`[Pipeline] 🛑 Backpressure: Fetching paused (extract queue full)`);
+      }
+      if (fetchQueueSize >= this.MAX_FETCH_QUEUE_SIZE) {
+        console.log(`[Pipeline] 🛑 Backpressure: Link discovery paused (fetch queue full)`);
+      }
+    }, 30000); // Every 30 seconds
+  }
+
+  /**
    * Start the pipeline processing
    */
   async process(): Promise<{ completed: number; failed: number }> {
     console.log(`[Pipeline] Starting for ${this.config.startUrl}`);
+
+    // Start queue monitoring
+    this.startQueueMonitoring();
 
     // Check current metadata state - we'll always check first few pages to potentially find better metadata
     const currentSource = await prisma.source.findUnique({
@@ -468,6 +518,12 @@ export class PipelineProcessor {
       return;
     }
 
+    // MEMORY FIX: Backpressure - don't add to fetch queue if it's already too large
+    // This prevents runaway link discovery from overwhelming the pipeline
+    if (this.fetchQueue.length >= this.MAX_FETCH_QUEUE_SIZE) {
+      return; // Skip this URL for now
+    }
+
     // Skip if max depth exceeded
     if (task.depth > this.config.maxDepth) {
       return;
@@ -562,6 +618,15 @@ export class PipelineProcessor {
           this.isCancelled = true;
           break;
         }
+      }
+
+      // MEMORY FIX: Backpressure - pause fetching if extract queue is full
+      if (this.extractQueue.length >= this.MAX_EXTRACT_QUEUE_SIZE) {
+        if (this.extractQueue.length === this.MAX_EXTRACT_QUEUE_SIZE) {
+          console.log(`[Pipeline] Extract queue full (${this.extractQueue.length}/${this.MAX_EXTRACT_QUEUE_SIZE}), pausing fetching...`);
+        }
+        await this.sleep(1000); // Wait 1 second for extract queue to drain
+        continue;
       }
 
       const task = this.fetchQueue.shift();
@@ -734,6 +799,16 @@ export class PipelineProcessor {
           this.isCancelled = true;
           break;
         }
+      }
+
+      // MEMORY FIX: Backpressure - pause extracting if embed queue is full
+      // This prevents memory overflow from too many pages waiting for embeddings
+      if (this.embedQueue.length >= this.MAX_EMBED_QUEUE_SIZE) {
+        if (this.embedQueue.length === this.MAX_EMBED_QUEUE_SIZE) {
+          console.log(`[Pipeline] Embed queue full (${this.embedQueue.length}/${this.MAX_EMBED_QUEUE_SIZE}), pausing extraction...`);
+        }
+        await this.sleep(2000); // Wait 2 seconds for embed queue to drain
+        continue;
       }
 
       const task = this.extractQueue.shift();
