@@ -93,4 +93,14 @@ export class AzureOpenAIEmbeddingProvider implements EmbeddingProvider {
       metadata: chunk.metadata,
     }))
   }
+
+  /**
+   * Cleanup resources and close connections
+   * CRITICAL: Azure OpenAI client maintains HTTP connections that must be released
+   */
+  async cleanup(): Promise<void> {
+    // OpenAI SDK doesn't expose a close() method, but we can help GC by clearing reference
+    // This allows the underlying HTTP agent to be garbage collected
+    ;(this.client as any) = null
+  }
 }

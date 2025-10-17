@@ -53,6 +53,7 @@ export interface DocumentProcessingResult {
 export class DocumentPipelineProcessor {
   private options: DocumentProcessingOptions
   private documentId?: string
+  private embeddingProvider?: any // MEMORY FIX: Store provider reference for cleanup
 
   constructor(options: DocumentProcessingOptions) {
     this.options = options
@@ -287,8 +288,9 @@ export class DocumentPipelineProcessor {
     const memAfterChunking = process.memoryUsage()
     console.log(`[Document Pipeline] Memory after chunking: ${Math.round(memAfterChunking.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterChunking.heapTotal / 1024 / 1024)}MB`)
 
-    // Get embedding provider once and reuse it
-    const provider = await getEmbeddingProvider()
+    // MEMORY FIX: Get embedding provider once and reuse it, store for cleanup
+    this.embeddingProvider = await getEmbeddingProvider()
+    const provider = this.embeddingProvider
     console.log(`[Document Pipeline] Embedding provider initialized`)
 
     const memAfterProvider = process.memoryUsage()
@@ -342,6 +344,13 @@ export class DocumentPipelineProcessor {
         })
         savedChunks++
       }
+    }
+
+    // MEMORY FIX: Cleanup embedding provider to release HTTP connections
+    if (this.embeddingProvider) {
+      await this.embeddingProvider.cleanup()
+      this.embeddingProvider = undefined
+      console.log(`[Document Pipeline] Embedding provider cleaned up`)
     }
 
     return savedChunks

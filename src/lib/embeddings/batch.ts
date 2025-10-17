@@ -23,6 +23,56 @@ import { chunkText } from './chunker';
 import { createChunks } from '@/lib/db/queries/chunks';
 import { getActiveEmbeddingConfig } from './config';
 
+// MEMORY FIX: Singleton client to prevent creating multiple OpenAI clients
+// Each client maintains HTTP connections that must be reused
+let cachedClient: OpenAI | null = null;
+let cachedConfigHash: string | null = null;
+
+/**
+ * MEMORY FIX: Get or create a singleton OpenAI client for batch operations
+ * This prevents creating a new client for every batch function call
+ */
+async function getBatchClient(): Promise<OpenAI> {
+  const config = await getActiveEmbeddingConfig();
+
+  // Create a hash of the config to detect changes
+  const configHash = `${config.provider}-${config.apiKey}-${config.apiEndpoint}-${config.deploymentName}`;
+
+  // Return cached client if config hasn't changed
+  if (cachedClient && cachedConfigHash === configHash) {
+    return cachedClient;
+  }
+
+  // Config changed or no cached client - create new one
+  console.log('[Batch] Creating new OpenAI client for batch operations');
+
+  cachedClient = new OpenAI({
+    apiKey: config.apiKey,
+    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
+      ? {
+          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
+          defaultQuery: { 'api-version': '2024-06-01' },
+          defaultHeaders: { 'api-key': config.apiKey },
+        }
+      : {}),
+  });
+
+  cachedConfigHash = configHash;
+  return cachedClient;
+}
+
+/**
+ * MEMORY FIX: Cleanup the singleton client
+ * Call this when the worker shuts down or when config changes
+ */
+export function cleanupBatchClient(): void {
+  if (cachedClient) {
+    console.log('[Batch] Cleaning up OpenAI batch client');
+    cachedClient = null;
+    cachedConfigHash = null;
+  }
+}
+
 export interface BatchEmbeddingRequest {
   custom_id: string;  // pageId:chunkIndex
   method: "POST";
@@ -63,17 +113,8 @@ export async function createBatchEmbeddingJob(sourceId: string): Promise<string>
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 
-  // Create OpenAI client with config
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
-      ? {
-          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
-          defaultQuery: { 'api-version': '2024-06-01' },
-          defaultHeaders: { 'api-key': config.apiKey },
-        }
-      : {}),
-  });
+  // MEMORY FIX: Use singleton client instead of creating new one
+  const client = await getBatchClient();
 
   // 1. Get all pages from the source that need embeddings
   const pages = await prisma.page.findMany({
@@ -193,17 +234,8 @@ export async function checkBatchStatus(batchId: string) {
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 
-  // Create OpenAI client with config
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
-      ? {
-          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
-          defaultQuery: { 'api-version': '2024-06-01' },
-          defaultHeaders: { 'api-key': config.apiKey },
-        }
-      : {}),
-  });
+  // MEMORY FIX: Use singleton client instead of creating new one
+  const client = await getBatchClient();
 
   const batch = await client.batches.retrieve(batchId);
 
@@ -229,17 +261,8 @@ export async function processBatchResults(batchId: string) {
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 
-  // Create OpenAI client with config
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
-      ? {
-          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
-          defaultQuery: { 'api-version': '2024-06-01' },
-          defaultHeaders: { 'api-key': config.apiKey },
-        }
-      : {}),
-  });
+  // MEMORY FIX: Use singleton client instead of creating new one
+  const client = await getBatchClient();
 
   // 1. Retrieve batch info
   const batch = await client.batches.retrieve(batchId);
@@ -413,17 +436,8 @@ export async function cancelBatchJob(batchId: string) {
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 
-  // Create OpenAI client with config
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
-      ? {
-          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
-          defaultQuery: { 'api-version': '2024-06-01' },
-          defaultHeaders: { 'api-key': config.apiKey },
-        }
-      : {}),
-  });
+  // MEMORY FIX: Use singleton client instead of creating new one
+  const client = await getBatchClient();
 
   const batch = await client.batches.cancel(batchId);
 
@@ -449,17 +463,8 @@ export async function listBatchJobs(status?: string) {
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 
-  // Create OpenAI client with config
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    ...(config.provider === 'AZURE_OPENAI' && config.apiEndpoint && config.deploymentName
-      ? {
-          baseURL: `${config.apiEndpoint}/openai/deployments/${config.deploymentName}`,
-          defaultQuery: { 'api-version': '2024-06-01' },
-          defaultHeaders: { 'api-key': config.apiKey },
-        }
-      : {}),
-  });
+  // MEMORY FIX: Use singleton client instead of creating new one
+  const client = await getBatchClient();
 
   const batches = await client.batches.list({
     limit: 100,

@@ -81,4 +81,13 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
       metadata: chunk.metadata,
     }))
   }
+
+  /**
+   * Cleanup resources and close connections
+   */
+  async cleanup(): Promise<void> {
+    // OpenAI SDK doesn't expose a close() method, but we can help GC by clearing reference
+    // This allows the underlying HTTP agent to be garbage collected
+    ;(this.client as any) = null
+  }
 }

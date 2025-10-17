@@ -9,6 +9,7 @@ import { VertexAIEmbeddingProvider } from './vertex'
 export interface EmbeddingProvider {
   generateEmbeddings(texts: string[]): Promise<number[][]>
   chunkAndEmbed(text: string): Promise<ChunkWithEmbedding[]>
+  cleanup(): Promise<void>
 }
 
 export interface ChunkWithEmbedding {

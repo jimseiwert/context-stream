@@ -12,7 +12,7 @@
 
 import { createChunks } from "@/lib/db/queries/chunks";
 import { upsertPage } from "@/lib/db/queries/pages";
-import { getEmbeddingProvider } from "@/lib/embeddings/provider";
+import { getEmbeddingProvider, type EmbeddingProvider } from "@/lib/embeddings/provider";
 import { getActiveEmbeddingConfig } from "@/lib/embeddings/config";
 import { ContentExtractor } from "@/lib/scraper/content-extractor";
 import { LlmsTxtParser } from "@/lib/scraper/llms-txt-parser";
@@ -84,6 +84,7 @@ export class PipelineProcessor {
   private sitemapParser: SitemapParser;
   private contentExtractor: ContentExtractor;
   private botProtectionDetector: BotProtectionDetector;
+  private embeddingProvider?: EmbeddingProvider; // MEMORY FIX: Reuse single provider instance
 
   private fetchQueue: PageTask[] = [];
   private extractQueue: PageTask[] = [];
@@ -882,6 +883,10 @@ export class PipelineProcessor {
    * Embed workers - Generate vector embeddings
    */
   private async runEmbedWorkers() {
+    // MEMORY FIX: Initialize embedding provider once and reuse across all workers
+    // This prevents creating a new Azure/OpenAI client for every single page
+    this.embeddingProvider = await getEmbeddingProvider();
+
     const workers = [];
     for (let i = 0; i < this.config.embeddingConcurrency!; i++) {
       workers.push(this.embedWorker());
@@ -952,9 +957,12 @@ export class PipelineProcessor {
 
         // Generate embeddings if content is long enough
         if (task.content.text && task.content.text.length > 50) {
-          // Get embedding provider on-demand
-          const embeddingProvider = await getEmbeddingProvider();
-          const chunks = await embeddingProvider.chunkAndEmbed(
+          // MEMORY FIX: Use the reused embedding provider instance
+          // This prevents creating a new Azure/OpenAI client for every page
+          if (!this.embeddingProvider) {
+            throw new Error('Embedding provider not initialized');
+          }
+          const chunks = await this.embeddingProvider.chunkAndEmbed(
             task.content.text
           );
           console.log(
@@ -1251,6 +1259,12 @@ export class PipelineProcessor {
   async cleanup() {
     this.isProcessing = false;
     await this.contentExtractor.cleanup();
+
+    // MEMORY FIX: Cleanup embedding provider to release HTTP connections
+    if (this.embeddingProvider) {
+      await this.embeddingProvider.cleanup();
+      this.embeddingProvider = undefined;
+    }
 
     // MEMORY FIX: Clear all data structures to free memory
     this.tasks.clear();

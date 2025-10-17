@@ -120,4 +120,13 @@ export class VertexAIEmbeddingProvider implements EmbeddingProvider {
       metadata: chunk.metadata,
     }))
   }
+
+  /**
+   * Cleanup resources
+   * Vertex AI uses fetch API which doesn't require explicit cleanup
+   */
+  async cleanup(): Promise<void> {
+    // No explicit cleanup needed for fetch-based API
+    // This method exists for interface compliance
+  }
 }
