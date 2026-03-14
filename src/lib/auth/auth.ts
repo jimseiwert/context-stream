@@ -17,6 +17,15 @@ if (!githubClientId || !githubClientSecret) {
   );
 }
 
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+if (!googleClientId || !googleClientSecret) {
+  console.warn(
+    "Google OAuth credentials not found. Google login will be disabled."
+  );
+}
+
 // Use the shared Prisma client (which already has SSL configured)
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -26,15 +35,24 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
-  socialProviders:
-    githubClientId && githubClientSecret
+  socialProviders: {
+    ...(githubClientId && githubClientSecret
       ? {
           github: {
             clientId: githubClientId,
             clientSecret: githubClientSecret,
           },
         }
-      : {},
+      : {}),
+    ...(googleClientId && googleClientSecret
+      ? {
+          google: {
+            clientId: googleClientId,
+            clientSecret: googleClientSecret,
+          },
+        }
+      : {}),
+  },
   user: {
     additionalFields: {
       role: {
