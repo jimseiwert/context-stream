@@ -1,10 +1,10 @@
 import { ComingSoon } from "@/components/layout/coming-soon";
 
-export default function SearchPage() {
+export default function McpPage() {
   return (
     <ComingSoon
-      title="Search"
-      description="Hybrid BM25 + vector search with reranking and query playground."
+      title="MCP Server"
+      description="Connect Claude Desktop, Cursor, and other AI tools to your knowledge base."
       issue="https://github.com/jimseiwert/context-stream/issues/25"
     />
   );

@@ -48,12 +48,12 @@ export function hasPermission(role: UserRole, permission: Permission): boolean {
 
 // Check if a role has any of the specified permissions
 export function hasAnyPermission(role: UserRole, permissions: Permission[]): boolean {
-  return permissions.some((permission: any) => hasPermission(role, permission))
+  return permissions.some((permission) => hasPermission(role, permission))
 }
 
 // Check if a role has all of the specified permissions
 export function hasAllPermissions(role: UserRole, permissions: Permission[]): boolean {
-  return permissions.every((permission: any) => hasPermission(role, permission))
+  return permissions.every((permission) => hasPermission(role, permission))
 }
 
 // Check if user is admin or super admin

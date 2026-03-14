@@ -57,6 +57,9 @@ backend/htmlcov/
 *.swo
 .husky
 .playwright-mcp
+playwright-report/
+test-results/
+.superpowers/
 # Backups
 backups/
 

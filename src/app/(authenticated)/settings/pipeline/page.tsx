@@ -1,10 +1,10 @@
 import { ComingSoon } from "@/components/layout/coming-soon";
 
-export default function SourcesPage() {
+export default function PipelineConfigPage() {
   return (
     <ComingSoon
-      title="Sources"
-      description="Manage your data sources — websites, GitHub repos, and document uploads."
+      title="Pipeline Config"
+      description="Configure chunking strategy, embedding provider, and re-index schedule."
       issue="https://github.com/jimseiwert/context-stream/issues/23"
     />
   );

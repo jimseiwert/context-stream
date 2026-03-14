@@ -1,10 +1,10 @@
 import { ComingSoon } from "@/components/layout/coming-soon";
 
-export default function AdminUsersPage() {
+export default function AdminSystemPage() {
   return (
     <ComingSoon
-      title="User Management"
-      description="Manage users, roles, and workspace access."
+      title="System"
+      description="Configure embedding providers, vector stores, and feature flags."
       issue="https://github.com/jimseiwert/context-stream/issues/27"
     />
   );
