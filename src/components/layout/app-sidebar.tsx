@@ -152,7 +152,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 const Icon = item.icon;
                 const isActive =
                   pathname === item.href ||
-                  (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                  pathname.startsWith(item.href + "/");
 
                 return (
                   <Link
