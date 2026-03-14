@@ -1,109 +1,163 @@
-// Workspace Management Queries
+// Workspace Management Queries - Drizzle ORM
 // Handles all database operations for Workspaces
 
-import { prisma } from '@/lib/db'
-import { Prisma } from '@prisma/client'
+import { and, count, desc, eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import {
+  pages,
+  queryLogs,
+  sources,
+  sourceUsageStats,
+  users,
+  workspaces,
+  workspaceSources,
+} from "@/lib/db/schema";
 
 export interface CreateWorkspaceParams {
-  name: string
-  slug: string
-  ownerId: string
+  name: string;
+  slug: string;
+  ownerId: string;
 }
 
 /**
  * Get all workspaces for a user
  */
 export async function getUserWorkspaces(userId: string) {
-  return prisma.workspace.findMany({
-    where: { ownerId: userId },
-    include: {
-      _count: {
-        select: { sources: true },
-      },
+  const userWorkspaces = await db
+    .select({
+      workspace: workspaces,
+      sourceCount: count(workspaceSources.id),
+    })
+    .from(workspaces)
+    .leftJoin(
+      workspaceSources,
+      eq(workspaceSources.workspaceId, workspaces.id)
+    )
+    .where(eq(workspaces.ownerId, userId))
+    .groupBy(workspaces.id)
+    .orderBy(desc(workspaces.createdAt));
+
+  return userWorkspaces.map((row: any) => ({
+    ...row.workspace,
+    _count: {
+      sources: row.sourceCount,
     },
-    orderBy: { createdAt: 'desc' },
-  })
+  }));
 }
 
 /**
  * Get a single workspace by ID
  */
 export async function getWorkspaceById(workspaceId: string, userId?: string) {
-  const where: Prisma.WorkspaceWhereUniqueInput = {
-    id: workspaceId,
-    ...(userId && { ownerId: userId }),
+  const conditions = [eq(workspaces.id, workspaceId)];
+  if (userId) {
+    conditions.push(eq(workspaces.ownerId, userId));
   }
 
-  return prisma.workspace.findUnique({
-    where,
-    include: {
+  const workspace = await db.query.workspaces.findFirst({
+    where: and(...conditions),
+    with: {
       owner: {
-        select: {
+        columns: {
           id: true,
           name: true,
           email: true,
         },
       },
-      _count: {
-        select: { sources: true },
-      },
-      sources: {
-        take: 10,
-        orderBy: { addedAt: 'desc' },
-        include: {
-          source: {
-            select: {
-              id: true,
-              url: true,
-              domain: true,
-              scope: true,
-              status: true,
-              lastScrapedAt: true,
-            },
-          },
-        },
-      },
     },
-  })
+  });
+
+  if (!workspace) return null;
+
+  // Get source count
+  const sourceCount = await db
+    .select({ count: count() })
+    .from(workspaceSources)
+    .where(eq(workspaceSources.workspaceId, workspaceId));
+
+  // Get recent sources
+  const recentSources = await db
+    .select({
+      id: workspaceSources.id,
+      sourceId: workspaceSources.sourceId,
+      addedAt: workspaceSources.addedAt,
+      addedBy: workspaceSources.addedBy,
+      source: {
+        id: sources.id,
+        url: sources.url,
+        domain: sources.domain,
+        scope: sources.scope,
+        status: sources.status,
+        lastScrapedAt: sources.lastScrapedAt,
+      },
+    })
+    .from(workspaceSources)
+    .leftJoin(sources, eq(sources.id, workspaceSources.sourceId))
+    .where(eq(workspaceSources.workspaceId, workspaceId))
+    .orderBy(desc(workspaceSources.addedAt))
+    .limit(10);
+
+  return {
+    ...workspace,
+    _count: {
+      sources: sourceCount[0]?.count || 0,
+    },
+    sources: recentSources,
+  };
 }
 
 /**
  * Get workspace by slug
  */
 export async function getWorkspaceBySlug(slug: string, userId?: string) {
-  const where: Prisma.WorkspaceWhereInput = {
-    slug,
-    ...(userId && { ownerId: userId }),
+  const conditions = [eq(workspaces.slug, slug)];
+  if (userId) {
+    conditions.push(eq(workspaces.ownerId, userId));
   }
 
-  return prisma.workspace.findFirst({
-    where,
-    include: {
+  const workspace = await db.query.workspaces.findFirst({
+    where: and(...conditions),
+    with: {
       owner: {
-        select: {
+        columns: {
           id: true,
           name: true,
           email: true,
         },
       },
-      _count: {
-        select: { sources: true },
-      },
     },
-  })
+  });
+
+  if (!workspace) return null;
+
+  // Get source count
+  const sourceCount = await db
+    .select({ count: count() })
+    .from(workspaceSources)
+    .where(eq(workspaceSources.workspaceId, workspace.id));
+
+  return {
+    ...workspace,
+    _count: {
+      sources: sourceCount[0]?.count || 0,
+    },
+  };
 }
 
 /**
  * Create a new workspace
  */
 export async function createWorkspace(params: CreateWorkspaceParams) {
-  return prisma.workspace.create({
-    data: {
+  const [workspace] = await db
+    .insert(workspaces)
+    .values({
       name: params.name,
       slug: params.slug,
       ownerId: params.ownerId,
-    },
-  })
+    })
+    .returning();
+
+  return workspace;
 }
 
 /**
@@ -114,44 +168,52 @@ export async function updateWorkspace(
   data: { name?: string; slug?: string },
   userId?: string
 ) {
-  const where: Prisma.WorkspaceWhereUniqueInput = {
-    id: workspaceId,
-    ...(userId && { ownerId: userId }),
+  const conditions = [eq(workspaces.id, workspaceId)];
+  if (userId) {
+    conditions.push(eq(workspaces.ownerId, userId));
   }
 
-  return prisma.workspace.update({
-    where,
-    data,
-  })
+  const [updated] = await db
+    .update(workspaces)
+    .set(data)
+    .where(and(...conditions))
+    .returning();
+
+  return updated;
 }
 
 /**
  * Delete a workspace
  */
 export async function deleteWorkspace(workspaceId: string, userId?: string) {
-  const where: Prisma.WorkspaceWhereUniqueInput = {
-    id: workspaceId,
-    ...(userId && { ownerId: userId }),
+  const conditions = [eq(workspaces.id, workspaceId)];
+  if (userId) {
+    conditions.push(eq(workspaces.ownerId, userId));
   }
 
-  return prisma.workspace.delete({
-    where,
-  })
+  const [deleted] = await db
+    .delete(workspaces)
+    .where(and(...conditions))
+    .returning();
+
+  return deleted;
 }
 
 /**
  * Check if workspace slug is available
  */
 export async function isSlugAvailable(slug: string, excludeId?: string) {
-  const existing = await prisma.workspace.findUnique({
-    where: { slug },
-    select: { id: true },
-  })
+  const existing = await db.query.workspaces.findFirst({
+    where: eq(workspaces.slug, slug),
+    columns: {
+      id: true,
+    },
+  });
 
-  if (!existing) return true
-  if (excludeId && existing.id === excludeId) return true
+  if (!existing) return true;
+  if (excludeId && existing.id === excludeId) return true;
 
-  return false
+  return false;
 }
 
 /**
@@ -161,22 +223,22 @@ export async function generateUniqueSlug(name: string): Promise<string> {
   // Convert to slug format
   let slug = name
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
   // Check if available
   if (await isSlugAvailable(slug)) {
-    return slug
+    return slug;
   }
 
   // Append number until unique
-  let counter = 1
+  let counter = 1;
   while (true) {
-    const candidate = `${slug}-${counter}`
+    const candidate = `${slug}-${counter}`;
     if (await isSlugAvailable(candidate)) {
-      return candidate
+      return candidate;
     }
-    counter++
+    counter++;
   }
 }
 
@@ -184,34 +246,37 @@ export async function generateUniqueSlug(name: string): Promise<string> {
  * Get workspace statistics
  */
 export async function getWorkspaceStats(workspaceId: string) {
-  const [sourceCount, pageCount, queryCount] = await Promise.all([
-    // Count sources
-    prisma.workspaceSource.count({
-      where: { workspaceId },
-    }),
+  const [sourceCountResult, pageCountResult, queryCountResult] =
+    await Promise.all([
+      // Count sources
+      db
+        .select({ count: count() })
+        .from(workspaceSources)
+        .where(eq(workspaceSources.workspaceId, workspaceId)),
 
-    // Count pages across all sources
-    prisma.page.count({
-      where: {
-        source: {
-          workspaceSources: {
-            some: { workspaceId },
-          },
-        },
-      },
-    }),
+      // Count pages across all sources
+      db
+        .select({ count: count() })
+        .from(pages)
+        .innerJoin(sources, eq(sources.id, pages.sourceId))
+        .innerJoin(
+          workspaceSources,
+          eq(workspaceSources.sourceId, sources.id)
+        )
+        .where(eq(workspaceSources.workspaceId, workspaceId)),
 
-    // Count queries
-    prisma.queryLog.count({
-      where: { workspaceId },
-    }),
-  ])
+      // Count queries
+      db
+        .select({ count: count() })
+        .from(queryLogs)
+        .where(eq(queryLogs.workspaceId, workspaceId)),
+    ]);
 
   return {
-    sourceCount,
-    pageCount,
-    queryCount,
-  }
+    sourceCount: sourceCountResult[0]?.count || 0,
+    pageCount: pageCountResult[0]?.count || 0,
+    queryCount: queryCountResult[0]?.count || 0,
+  };
 }
 
 /**
@@ -221,34 +286,46 @@ export async function getWorkspaceSources(
   workspaceId: string,
   params: { limit?: number; offset?: number } = {}
 ) {
-  const { limit = 20, offset = 0 } = params
+  const { limit = 20, offset = 0 } = params;
 
-  const [sources, total] = await prisma.$transaction([
-    prisma.workspaceSource.findMany({
-      where: { workspaceId },
-      include: {
-        source: {
-          include: {
-            _count: {
-              select: { pages: true },
-            },
-            usageStats: true,
-          },
-        },
-      },
-      orderBy: { addedAt: 'desc' },
-      skip: offset,
-      take: limit,
-    }),
-    prisma.workspaceSource.count({
-      where: { workspaceId },
-    }),
-  ])
+  const [workspaceSourcesData, total] = await Promise.all([
+    db
+      .select({
+        workspaceSource: workspaceSources,
+        source: sources,
+        pageCount: count(pages.id),
+        usageStats: sourceUsageStats,
+      })
+      .from(workspaceSources)
+      .leftJoin(sources, eq(sources.id, workspaceSources.sourceId))
+      .leftJoin(pages, eq(pages.sourceId, sources.id))
+      .leftJoin(sourceUsageStats, eq(sourceUsageStats.sourceId, sources.id))
+      .where(eq(workspaceSources.workspaceId, workspaceId))
+      .groupBy(
+        workspaceSources.id,
+        sources.id,
+        sourceUsageStats.id
+      )
+      .orderBy(desc(workspaceSources.addedAt))
+      .limit(limit)
+      .offset(offset),
+
+    db
+      .select({ count: count() })
+      .from(workspaceSources)
+      .where(eq(workspaceSources.workspaceId, workspaceId)),
+  ]);
 
   return {
-    sources: sources.map((ws) => ws.source),
-    total,
-  }
+    sources: workspaceSourcesData.map((row: any) => ({
+      ...row.source,
+      _count: {
+        pages: row.pageCount,
+      },
+      usageStats: row.usageStats,
+    })),
+    total: total[0]?.count || 0,
+  };
 }
 
 /**
@@ -258,12 +335,15 @@ export async function removeSourceFromWorkspace(
   workspaceId: string,
   sourceId: string
 ) {
-  return prisma.workspaceSource.delete({
-    where: {
-      workspaceId_sourceId: {
-        workspaceId,
-        sourceId,
-      },
-    },
-  })
+  const [deleted] = await db
+    .delete(workspaceSources)
+    .where(
+      and(
+        eq(workspaceSources.workspaceId, workspaceId),
+        eq(workspaceSources.sourceId, sourceId)
+      )
+    )
+    .returning();
+
+  return deleted;
 }

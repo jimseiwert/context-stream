@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
 
     // Format recent activity
     const formattedActivity = await Promise.all(
-      recentActivity.map(async (log) => {
+      recentActivity.map(async (log: any) => {
         // Get user separately in case relationship doesn't exist yet
         let user = null;
         if (log.userId) {

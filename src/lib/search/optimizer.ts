@@ -89,7 +89,7 @@ export function optimizeResults(
     ? Math.min(...topResults.map(r => r.scores.reranked))
     : 0
 
-  return topResults.map((result) => {
+  return topResults.map((result: any) => {
     // Generate optimized snippet
     const snippet = generateSnippet(
       result.content,
@@ -115,7 +115,7 @@ export function optimizeResults(
 
     // Calculate total multiplier from all signals
     const totalMultiplier = result.signals
-      ? Object.values(result.signals).reduce((acc, signal) => acc * signal, 1.0)
+      ? (Object.values(result.signals).reduce((acc: any, signal: any) => acc * signal, 1.0) as number)
       : 1.0
 
     const optimized: OptimizedResult = {
@@ -377,7 +377,7 @@ export function estimateTokens(result: OptimizedResult): number {
  * Calculate total estimated tokens for all results
  */
 export function estimateTotalTokens(results: OptimizedResult[]): number {
-  return results.reduce((sum, result) => sum + estimateTokens(result), 0)
+  return results.reduce((sum: any, result: any) => sum + estimateTokens(result), 0)
 }
 
 /**

@@ -5,7 +5,7 @@
  */
 
 import { createWorker } from 'tesseract.js'
-import { ImageProcessingMethod } from '@prisma/client'
+import { ImageProcessingMethod } from "@/lib/db"
 import { ImageInfo } from './extractors'
 
 export interface ImageProcessingConfig {
@@ -266,7 +266,7 @@ export async function processBatchImages(
   for (let i = 0; i < images.length; i += concurrency) {
     const chunk = images.slice(i, i + concurrency)
     const chunkResults = await Promise.all(
-      chunk.map((img) => processImage(img.buffer, config))
+      chunk.map((img: any) => processImage(img.buffer, config))
     )
     results.push(...chunkResults)
   }

@@ -1,7 +1,7 @@
 // Subscription Plans Configuration
 // Defines all plan tiers, quotas, and pricing
 
-import { PlanTier } from '@prisma/client'
+import { PlanTier } from "@/lib/db"
 
 export interface PlanConfig {
   tier: PlanTier

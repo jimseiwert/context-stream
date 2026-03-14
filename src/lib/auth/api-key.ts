@@ -49,7 +49,7 @@ export async function validateApiKey(key: string): Promise<string> {
       where: { id: apiKey.id },
       data: { lastUsedAt: new Date() },
     })
-    .catch((error) => {
+    .catch((error: any) => {
       console.error('Failed to update API key last used:', error)
     })
 

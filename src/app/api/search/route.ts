@@ -19,7 +19,7 @@ import { rerank } from "@/lib/search/reranker";
 import { sessionManager } from "@/lib/search/session";
 import { checkQuota, QuotaType } from "@/lib/subscriptions/quota-checker";
 import { trackUsage } from "@/lib/subscriptions/usage-tracker";
-import { UsageEventType } from "@prisma/client";
+import { UsageEventType } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
       select: { id: true },
     });
 
-    const baseSourceIds = sources.map((s) => s.id);
+    const baseSourceIds = sources.map((s: any) => s.id);
 
     if (baseSourceIds.length === 0) {
       return NextResponse.json({
@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
     // 11. Update session
     const shownPageIds = reranked
       .slice(data.offset, data.offset + data.limit)
-      .map((r) => r.pageId);
+      .map((r: any) => r.pageId);
     await sessionManager.addShownPages(searchSession.id, shownPageIds);
     await sessionManager.addQuery(
       searchSession.id,
@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
       data: {
         query: data.query,
         resultsCount: paginatedResults.length,
-        topPageIds: paginatedResults.slice(0, 10).map((r) => r.url),
+        topPageIds: paginatedResults.slice(0, 10).map((r: any) => r.url),
         sourceIds: [],
         latencyMs: Date.now() - startTime,
         workspaceId: workspaceId,
@@ -275,7 +275,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      results: paginatedResults.map((r) => ({
+      results: paginatedResults.map((r: any) => ({
         id: r.url,
         title: r.title,
         url: r.url,
@@ -294,7 +294,7 @@ export async function POST(request: NextRequest) {
       cached: false,
       sessionId: searchSession.id,
       _meta: {
-        frameworks: parsed.frameworks.map((f) => f.name),
+        frameworks: parsed.frameworks.map((f: any) => f.name),
         intent: parsed.intent,
       },
     });

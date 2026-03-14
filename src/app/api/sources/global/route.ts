@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
         where: { workspaceId: workspace.id },
         select: { sourceId: true },
       });
-      addedSourceIds = workspaceSources.map((ws) => ws.sourceId);
+      addedSourceIds = workspaceSources.map((ws: any) => ws.sourceId);
     }
 
     // Build where clause for global sources
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json({
-      sources: sources.map((source) => ({
+      sources: sources.map((source: any) => ({
         ...source,
         pageCount: source._count.pages,
         workspaceCount: source._count.workspaceSources,

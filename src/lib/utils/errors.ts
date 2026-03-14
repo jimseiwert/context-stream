@@ -3,7 +3,6 @@
 
 import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
-import { Prisma } from '@prisma/client'
 
 // Base API Error class
 export class ApiError extends Error {
@@ -112,7 +111,7 @@ export function handleApiError(error: unknown, requestId?: string): NextResponse
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Invalid request parameters',
-          details: error.issues.map((e) => ({
+          details: error.issues.map((e: any) => ({
             path: e.path.join('.'),
             message: e.message,
           })),
@@ -123,16 +122,18 @@ export function handleApiError(error: unknown, requestId?: string): NextResponse
     )
   }
 
-  // Handle Prisma errors
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    // Unique constraint violation
-    if (error.code === 'P2002') {
+  // Handle PostgreSQL errors (from postgres.js/Drizzle)
+  if (error && typeof error === 'object' && 'code' in error) {
+    const pgError = error as { code: string; detail?: string; constraint?: string };
+
+    // Unique constraint violation (23505)
+    if (pgError.code === '23505') {
       return NextResponse.json(
         {
           error: {
             code: 'CONFLICT',
             message: 'Resource already exists',
-            details: error.meta,
+            details: pgError.detail,
             requestId,
           },
         },
@@ -140,22 +141,8 @@ export function handleApiError(error: unknown, requestId?: string): NextResponse
       )
     }
 
-    // Record not found
-    if (error.code === 'P2025') {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'NOT_FOUND',
-            message: 'Resource not found',
-            requestId,
-          },
-        },
-        { status: 404 }
-      )
-    }
-
-    // Foreign key constraint violation
-    if (error.code === 'P2003') {
+    // Foreign key constraint violation (23503)
+    if (pgError.code === '23503') {
       return NextResponse.json(
         {
           error: {
@@ -167,20 +154,20 @@ export function handleApiError(error: unknown, requestId?: string): NextResponse
         { status: 400 }
       )
     }
-  }
 
-  // Handle Prisma validation errors
-  if (error instanceof Prisma.PrismaClientValidationError) {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid data provided',
-          requestId,
+    // Not null violation (23502)
+    if (pgError.code === '23502') {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Required field missing',
+            requestId,
+          },
         },
-      },
-      { status: 400 }
-    )
+        { status: 400 }
+      )
+    }
   }
 
   // Handle standard JavaScript errors

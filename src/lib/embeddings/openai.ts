@@ -33,7 +33,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
         dimensions: this.dimensions,
       })
 
-      return response.data.map((item) => item.embedding)
+      return response.data.map((item: any) => item.embedding)
     } catch (error) {
       console.error('Failed to generate embeddings:', error)
       throw new Error(`Embedding generation failed: ${error}`)

@@ -65,7 +65,7 @@ export async function POST(
     // Check if user has access to this source
     const hasAccess =
       source.scope === 'GLOBAL' ||
-      source.workspaceSources.some((ws) => ws.workspace.ownerId === session.user.id)
+      source.workspaceSources.some((ws: any) => ws.workspace.ownerId === session.user.id)
 
     if (!hasAccess) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -205,7 +205,7 @@ export async function GET(
     // Check if user has access to this source
     const hasAccess =
       source.scope === 'GLOBAL' ||
-      source.workspaceSources.some((ws) => ws.workspace.ownerId === session.user.id)
+      source.workspaceSources.some((ws: any) => ws.workspace.ownerId === session.user.id)
 
     if (!hasAccess) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -231,7 +231,7 @@ export async function GET(
     const total = await prisma.document.count({ where: { sourceId } })
 
     // Format response
-    const formattedDocuments = documents.map((doc) => ({
+    const formattedDocuments = documents.map((doc: any) => ({
       id: doc.id,
       filename: doc.filename,
       type: doc.type,

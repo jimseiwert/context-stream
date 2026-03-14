@@ -205,7 +205,7 @@ export class SessionManager {
 
     return {
       totalQueries: session.queries.length,
-      totalResults: session.queries.reduce((sum, q) => sum + q.resultCount, 0),
+      totalResults: session.queries.reduce((sum: any, q: any) => sum + q.resultCount, 0),
       uniquePagesShown: session.shownPageIds.length,
       totalClicks: session.queries.reduce(
         (sum, q) => sum + q.clickedPageIds.length,

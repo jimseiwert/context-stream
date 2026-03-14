@@ -22,7 +22,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useCreateCheckout } from "@/hooks/use-subscription";
 import { useSession } from "@/lib/auth/client";
-import { PlanTier } from "@prisma/client";
+import { PlanTier } from "@/lib/db/types";
 import {
   AlertTriangle,
   Building2,

@@ -166,7 +166,7 @@ export class URLDiscovery {
   ): boolean {
     // If include patterns are specified, URL must match at least one
     if (includePatterns.length > 0) {
-      const matches = includePatterns.some((pattern) =>
+      const matches = includePatterns.some((pattern: any) =>
         new RegExp(pattern).test(url)
       )
       if (!matches) return false
@@ -174,7 +174,7 @@ export class URLDiscovery {
 
     // URL must not match any exclude patterns
     if (excludePatterns.length > 0) {
-      const matches = excludePatterns.some((pattern) =>
+      const matches = excludePatterns.some((pattern: any) =>
         new RegExp(pattern).test(url)
       )
       if (matches) return false

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useCreateCheckout } from "@/hooks/use-subscription";
-import { PlanTier } from "@prisma/client";
+import { PlanTier } from "@/lib/db/types";
 import { Check, Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";

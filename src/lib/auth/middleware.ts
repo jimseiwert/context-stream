@@ -5,7 +5,7 @@ import { auth } from '@/lib/auth/auth'
 import { prisma } from '@/lib/db'
 import { UnauthorizedError, ForbiddenError } from '@/lib/utils/errors'
 import { Permission, hasPermission } from './permissions'
-import { UserRole } from '@prisma/client'
+import { UserRole } from "@/lib/db"
 import { headers } from 'next/headers'
 
 // Session type

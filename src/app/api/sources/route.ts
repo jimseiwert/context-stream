@@ -11,7 +11,7 @@ import { prisma } from "@/lib/db";
 import { addScrapeJob } from "@/lib/jobs/queue";
 import { checkQuota, QuotaType } from "@/lib/subscriptions/quota-checker";
 import { trackUsage } from "@/lib/subscriptions/usage-tracker";
-import { UsageEventType } from "@prisma/client";
+import { UsageEventType } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
       const total = await prisma.source.count({ where });
 
       // Format sources to match frontend expectations
-      const formattedSources = sources.map((source) => ({
+      const formattedSources = sources.map((source: any) => ({
         ...source,
         // For DOCUMENT sources, use documents count; for others use pages count
         pageCount: source.type === 'DOCUMENT' ? source._count.documents : source._count.pages,
@@ -149,8 +149,8 @@ export async function GET(request: NextRequest) {
         sources: formattedSources,
         summary: {
           total,
-          global: sources.filter((s) => s.scope === "GLOBAL").length,
-          workspace: sources.filter((s) => s.scope === "WORKSPACE").length,
+          global: sources.filter((s: any) => s.scope === "GLOBAL").length,
+          workspace: sources.filter((s: any) => s.scope === "WORKSPACE").length,
         },
       });
     }
@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
     const total = await prisma.source.count({ where });
 
     // Format sources to match frontend expectations
-    const formattedSources = sources.map((source) => ({
+    const formattedSources = sources.map((source: any) => ({
       ...source,
       // For DOCUMENT sources, use documents count; for others use pages count
       pageCount: source.type === 'DOCUMENT' ? source._count.documents : source._count.pages,
@@ -192,8 +192,8 @@ export async function GET(request: NextRequest) {
       sources: formattedSources,
       summary: {
         total,
-        global: sources.filter((s) => s.scope === "GLOBAL").length,
-        workspace: sources.filter((s) => s.scope === "WORKSPACE").length,
+        global: sources.filter((s: any) => s.scope === "GLOBAL").length,
+        workspace: sources.filter((s: any) => s.scope === "WORKSPACE").length,
       },
     });
   } catch (error: any) {

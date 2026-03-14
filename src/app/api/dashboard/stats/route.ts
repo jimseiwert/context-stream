@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     // Calculate stats
     const totalSources = sources.length;
     const totalPages = sources.reduce(
-      (sum, source) => sum + source._count.pages,
+      (sum: number, source: any) => sum + source._count.pages,
       0
     );
 
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Format recent sources for dashboard
-    const recentSources = sources.map((source) => ({
+    const recentSources = sources.map((source: any) => ({
       id: source.id,
       name: source.domain,
       url: source.url,
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
       take: 10,
     });
 
-    const recentActivity = recentJobs.map((job) => {
+    const recentActivity = recentJobs.map((job: any) => {
       let description = "";
       let type = "update";
 

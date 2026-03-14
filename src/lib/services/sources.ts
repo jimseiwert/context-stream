@@ -1,7 +1,7 @@
 // Source Management Service
 // Business logic for source CRUD operations with global source architecture
 
-import { prisma, Prisma, SourceScope, SourceStatus } from "@/lib/db";
+import { prisma, SourceScope, SourceStatus } from "@/lib/db";
 import {
   ConflictError,
   ForbiddenError,
@@ -27,14 +27,14 @@ export async function getWorkspaceSources(params: {
 
   const workspaceIds = workspaceId
     ? [workspaceId]
-    : workspaces.map((w) => w.id);
+    : workspaces.map((w: any) => w.id);
 
   if (workspaceIds.length === 0) {
     return { sources: [], total: 0 };
   }
 
   // Build query: global sources + workspace-specific sources
-  const where: Prisma.SourceWhereInput = {
+  const where: any = {
     AND: [
       {
         OR: [
@@ -110,8 +110,8 @@ export async function getSourceById(sourceId: string, userId: string) {
     select: { id: true },
   });
 
-  const userWorkspaceIds = userWorkspaces.map((w) => w.id);
-  const hasAccess = source.workspaceSources.some((ws) =>
+  const userWorkspaceIds = userWorkspaces.map((w: any) => w.id);
+  const hasAccess = source.workspaceSources.some((ws: any) =>
     userWorkspaceIds.includes(ws.workspaceId)
   );
 
@@ -245,8 +245,8 @@ export async function updateSource(
       select: { id: true },
     });
 
-    const userWorkspaceIds = userWorkspaces.map((w) => w.id);
-    const ownsSource = source.workspaceSources.some((ws) =>
+    const userWorkspaceIds = userWorkspaces.map((w: any) => w.id);
+    const ownsSource = source.workspaceSources.some((ws: any) =>
       userWorkspaceIds.includes(ws.workspaceId)
     );
 
@@ -320,7 +320,7 @@ export async function promoteSourceToGlobal(params: {
 }) {
   const { sourceId, adminId, reason } = params;
 
-  const source = await prisma.$transaction(async (tx) => {
+  const source = await prisma.$transaction(async (tx: any) => {
     // Get current source
     const currentSource = await tx.source.findUnique({
       where: { id: sourceId },
@@ -380,7 +380,7 @@ export async function demoteSourceToWorkspace(params: {
 }) {
   const { sourceId, adminId, targetWorkspaceId, reason } = params;
 
-  const source = await prisma.$transaction(async (tx) => {
+  const source = await prisma.$transaction(async (tx: any) => {
     const currentSource = await tx.source.findUnique({
       where: { id: sourceId },
     });
@@ -454,7 +454,7 @@ export async function getAdminSourceStats() {
   });
 
   const candidatesCount = promotionCandidates.filter(
-    (s) => s._count.workspaceSources >= 2
+    (s: any) => s._count.workspaceSources >= 2
   ).length;
 
   return {

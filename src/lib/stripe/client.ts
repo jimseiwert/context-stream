@@ -1,7 +1,7 @@
 // Stripe Client Wrapper
 // Handles all Stripe API interactions
 
-import { PlanTier } from "@prisma/client";
+import { PlanTier } from "@/lib/db";
 import Stripe from "stripe";
 import { PLANS } from "../subscriptions/plans";
 

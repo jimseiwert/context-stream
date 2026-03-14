@@ -236,8 +236,8 @@ export function parseQuery(query: string): ParsedQuery {
 
   // 5. Build required terms (all frameworks + important keywords)
   const requiredTerms = [
-    ...frameworks.map((f) => f.name),
-    ...keywords.filter((k) => k.length > 3), // Only longer keywords are required
+    ...frameworks.map((f: any) => f.name),
+    ...keywords.filter((k: any) => k.length > 3), // Only longer keywords are required
   ]
 
   return {
@@ -265,7 +265,7 @@ export function describeQuery(parsed: ParsedQuery): string {
 
   if (parsed.frameworks.length > 0) {
     const frameworkNames = parsed.frameworks
-      .map((f) => f.normalized)
+      .map((f: any) => f.normalized)
       .join(', ')
     parts.push(`Framework: ${frameworkNames}`)
   }

@@ -48,7 +48,7 @@ export class AzureOpenAIEmbeddingProvider implements EmbeddingProvider {
         dimensions: this.dimensions,
       })
 
-      return response.data.map((item) => item.embedding)
+      return response.data.map((item: any) => item.embedding)
     } catch (error) {
       console.error('Failed to generate Azure OpenAI embeddings:', error)
       throw new Error(`Azure OpenAI embedding generation failed: ${error}`)

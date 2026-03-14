@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Format sources to match frontend expectations
-    const formattedSources = sources.map((source) => ({
+    const formattedSources = sources.map((source: any) => ({
       ...source,
       // For DOCUMENT sources, use documents count; for others use pages count
       pageCount: source.type === 'DOCUMENT' ? source._count.documents : source._count.pages,
@@ -83,8 +83,8 @@ export async function GET(request: NextRequest) {
       sources: formattedSources,
       summary: {
         total: sources.length,
-        global: sources.filter((s) => s.scope === "GLOBAL").length,
-        workspace: sources.filter((s) => s.scope === "WORKSPACE").length,
+        global: sources.filter((s: any) => s.scope === "GLOBAL").length,
+        workspace: sources.filter((s: any) => s.scope === "WORKSPACE").length,
       },
     });
   } catch (error: any) {

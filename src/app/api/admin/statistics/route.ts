@@ -179,20 +179,20 @@ export async function GET(request: NextRequest) {
 
     // Calculate percentages for source distribution
     const totalSourcesCount = totalSources || 1; // Avoid division by zero
-    const sourcesByType = sourcesByScope.map((item) => ({
+    const sourcesByType = sourcesByScope.map((item: any) => ({
       type: item.scope,
       count: item._count.scope,
       percentage: (item._count.scope / totalSourcesCount) * 100,
     }));
 
-    const sourcesByStatusFormatted = sourcesByStatus.map((item) => ({
+    const sourcesByStatusFormatted = sourcesByStatus.map((item: any) => ({
       status: item.status,
       count: item._count.status,
       percentage: (item._count.status / totalSourcesCount) * 100,
     }));
 
     // Format top sources
-    const topSourcesFormatted = topSources.map((source) => ({
+    const topSourcesFormatted = topSources.map((source: any) => ({
       id: source.id,
       name: source.name || source.domain,
       domain: source.domain,
@@ -201,7 +201,7 @@ export async function GET(request: NextRequest) {
     }));
 
     // Format top queries
-    const topQueriesFormatted = topQueries.map((item) => ({
+    const topQueriesFormatted = topQueries.map((item: any) => ({
       query: item.query,
       count: item._count.query,
       lastQueriedAt:
@@ -230,7 +230,7 @@ export async function GET(request: NextRequest) {
     const avgIndexingTime =
       completedJobs.length > 0
         ? Math.round(
-            completedJobs.reduce((sum, job) => {
+            completedJobs.reduce((sum: number, job: any) => {
               const duration =
                 job.completedAt!.getTime() - job.startedAt!.getTime();
               return sum + duration;

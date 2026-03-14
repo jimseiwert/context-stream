@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '@/lib/db'
-import { ImageProcessingMethod } from '@prisma/client'
+import { ImageProcessingMethod } from "@/lib/db"
 
 export interface ImageProcessingConfig {
   id: string

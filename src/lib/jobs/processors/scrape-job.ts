@@ -12,7 +12,7 @@ import { Job } from 'bull'
 import { prisma } from '@/lib/db'
 import { PipelineProcessor, PipelineProgress } from './pipeline-processor'
 import { GitHubPipelineProcessor, GitHubPipelineProgress } from './github-pipeline-processor'
-import { SourceType } from '@prisma/client'
+import { SourceType } from "@/lib/db"
 import { createBatchEmbeddingJob } from '@/lib/embeddings/batch'
 
 export interface ScrapeJobData {

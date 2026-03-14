@@ -52,7 +52,7 @@ export class VertexAIEmbeddingProvider implements EmbeddingProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          instances: texts.map((text) => ({
+          instances: texts.map((text: any) => ({
             content: text,
           })),
           parameters: {

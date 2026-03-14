@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { useUsage } from './use-usage'
-import { PlanTier } from '@prisma/client'
+import { PlanTier } from "@/lib/db/types"
 
 export interface UpgradePromptState {
   isOpen: boolean
@@ -96,7 +96,7 @@ export function useUpgradePrompt() {
   // Automatically show prompt when approaching limits (optional)
   useEffect(() => {
     if (usage?.warnings && usage.warnings.length > 0) {
-      const highestWarning = usage.warnings.reduce((max, warning) =>
+      const highestWarning = usage.warnings.reduce((max: any, warning: any) =>
         warning.percentage > max.percentage ? warning : max
       )
 

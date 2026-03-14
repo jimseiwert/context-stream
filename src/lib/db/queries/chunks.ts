@@ -1,99 +1,73 @@
-// Chunk Management Queries
+// Chunk Management Queries - Drizzle ORM
 // Handles all database operations for content chunks and embeddings
 
-import { prisma } from "@/lib/db";
-import { Prisma } from "@prisma/client";
+import { and, avg, count, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { chunks, pages } from "@/lib/db/schema";
 
 export interface CreateChunkParams {
   pageId: string;
   chunkIndex: number;
   content: string;
   embedding: number[];
-  metadata?: Prisma.JsonValue;
+  metadata?: unknown;
 }
 
 /**
  * Create chunks for a page with embeddings
  */
-export async function createChunks(chunks: CreateChunkParams[]) {
-  // First, delete existing chunks for these pages (if any)
-  const pageIds = Array.from(new Set(chunks.map((c) => c.pageId)));
-  await prisma.chunk.deleteMany({
-    where: {
-      pageId: { in: pageIds },
-    },
-  });
+export async function createChunks(chunksData: CreateChunkParams[]) {
+  if (chunksData.length === 0) return { count: 0 };
 
-  // Create new chunks
-  // Note: Prisma doesn't support vector type directly in createMany
-  // We need to use raw SQL for bulk insert with embeddings
-  if (chunks.length === 0) return { count: 0 };
+  // First, delete existing chunks for these pages
+  const pageIds = Array.from(new Set(chunksData.map((c: any) => c.pageId)));
+  await db.delete(chunks).where(inArray(chunks.pageId, pageIds));
 
-  // Build SQL for bulk insert
-  const values = chunks
-    .map((chunk, idx) => {
-      const id = `gen_random_uuid()`; // Use built-in PostgreSQL function (PG 13+)
-      const pageId = `'${chunk.pageId}'::uuid`;
-      const chunkIndex = chunk.chunkIndex;
-      const content = `'${chunk.content.replace(/'/g, "''")}'`;
-      const embedding = `'[${chunk.embedding.join(",")}]'::vector`;
-      const metadata = chunk.metadata
-        ? `'${JSON.stringify(chunk.metadata).replace(/'/g, "''")}'::jsonb`
-        : "NULL";
+  // Prepare insert data
+  const values = chunksData.map((chunk: any) => ({
+    pageId: chunk.pageId,
+    chunkIndex: chunk.chunkIndex,
+    content: chunk.content,
+    embedding: chunk.embedding,
+    metadata: chunk.metadata,
+  }));
 
-      return `(${id}, ${pageId}, ${chunkIndex}, ${content}, ${embedding}, ${metadata}, NOW())`;
-    })
-    .join(",\n  ");
+  // Insert chunks
+  await db.insert(chunks).values(values);
 
-  const sql = `
-    INSERT INTO chunks (id, "pageId", "chunkIndex", content, embedding, metadata, "createdAt")
-    VALUES ${values}
-  `;
-
-  await prisma.$executeRawUnsafe(sql);
-
-  return { count: chunks.length };
+  return { count: chunksData.length };
 }
 
 /**
  * Get chunks for a page
  */
 export async function getChunksByPage(pageId: string) {
-  return prisma.chunk.findMany({
-    where: { pageId },
-    orderBy: { chunkIndex: "asc" },
-    select: {
-      id: true,
-      chunkIndex: true,
-      content: true,
-      metadata: true,
-      // Note: embedding is excluded by default (large field)
-    },
-  });
+  return await db
+    .select({
+      id: chunks.id,
+      chunkIndex: chunks.chunkIndex,
+      content: chunks.content,
+      metadata: chunks.metadata,
+    })
+    .from(chunks)
+    .where(eq(chunks.pageId, pageId))
+    .orderBy(chunks.chunkIndex);
 }
 
 /**
  * Get chunks with embeddings (for vector search)
  */
 export async function getChunksWithEmbeddings(pageId: string) {
-  // Use raw query to get embeddings
-  return prisma.$queryRaw<
-    Array<{
-      id: string;
-      chunk_index: number;
-      content: string;
-      embedding: number[];
-    }>
-  >`
-    SELECT
-      id,
-      "chunkIndex" as chunk_index,
-      content,
-      embedding::text as embedding
-    FROM chunks
-    WHERE "pageId" = ${pageId}::uuid
-    ORDER BY "chunkIndex" ASC
-  `;
+  return await db
+    .select({
+      id: chunks.id,
+      chunk_index: chunks.chunkIndex,
+      content: chunks.content,
+      embedding: chunks.embedding,
+    })
+    .from(chunks)
+    .where(eq(chunks.pageId, pageId))
+    .orderBy(chunks.chunkIndex);
 }
 
 /**
@@ -104,90 +78,87 @@ export async function vectorSearch(
   sourceIds: string[],
   limit = 100
 ) {
-  // Convert embedding to pgvector format
+  // Convert embedding to pgvector format string
   const embeddingStr = `[${queryEmbedding.join(",")}]`;
 
-  return prisma.$queryRaw<
-    Array<{
-      chunk_id: string;
-      page_id: string;
-      content: string;
-      similarity: number;
-      chunk_index: number;
-    }>
-  >`
+  // Use raw SQL for vector similarity search
+  const result = await db.execute<{
+    chunk_id: string;
+    page_id: string;
+    content: string;
+    similarity: number;
+    chunk_index: number;
+  }>(sql`
     SELECT
       c.id as chunk_id,
       c."pageId" as page_id,
       c.content,
       c."chunkIndex" as chunk_index,
       1 - (c.embedding <=> ${embeddingStr}::vector) as similarity
-    FROM chunks c
-    INNER JOIN pages p ON c."pageId" = p.id
+    FROM ${chunks} c
+    INNER JOIN ${pages} p ON c."pageId" = p.id
     WHERE p."sourceId"::text = ANY(${sourceIds})
       AND c.embedding IS NOT NULL
     ORDER BY c.embedding <=> ${embeddingStr}::vector
     LIMIT ${limit}
-  `;
+  `);
+
+  return result as any;
 }
 
 /**
  * Delete chunks for a page
  */
 export async function deleteChunksByPage(pageId: string) {
-  return prisma.chunk.deleteMany({
-    where: { pageId },
-  });
+  return await db.delete(chunks).where(eq(chunks.pageId, pageId));
 }
 
 /**
  * Delete chunks for a source (via pages)
  */
 export async function deleteChunksBySource(sourceId: string) {
-  return prisma.chunk.deleteMany({
-    where: {
-      page: {
-        sourceId,
-      },
-    },
-  });
+  // Get all page IDs for this source
+  const sourcePages = await db
+    .select({ id: pages.id })
+    .from(pages)
+    .where(eq(pages.sourceId, sourceId));
+
+  const pageIds = sourcePages.map((p: any) => p.id);
+
+  if (pageIds.length === 0) return;
+
+  return await db.delete(chunks).where(inArray(chunks.pageId, pageIds));
 }
 
 /**
  * Count chunks for a source
  */
 export async function countChunksBySource(sourceId: string) {
-  return prisma.chunk.count({
-    where: {
-      page: {
-        sourceId,
-      },
-    },
-  });
+  const result = await db
+    .select({ count: count() })
+    .from(chunks)
+    .innerJoin(pages, eq(pages.id, chunks.pageId))
+    .where(eq(pages.sourceId, sourceId));
+
+  return result[0]?.count || 0;
 }
 
 /**
  * Get chunk statistics for a source
  */
 export async function getChunkStats(sourceId: string) {
-  const stats = await prisma.$queryRaw<
-    Array<{
-      total_chunks: number;
-      chunks_with_embeddings: number;
-      avg_chunk_length: number;
-    }>
-  >`
-    SELECT
-      COUNT(*) as total_chunks,
-      COUNT(c.embedding) as chunks_with_embeddings,
-      AVG(LENGTH(c.content)) as avg_chunk_length
-    FROM chunks c
-    INNER JOIN pages p ON c."pageId" = p.id
-    WHERE p."sourceId"::text = ${sourceId}
-  `;
+  const result = await db
+    .select({
+      total_chunks: count(),
+      chunks_with_embeddings: count(chunks.embedding),
+      avg_chunk_length: avg(sql`LENGTH(${chunks.content})`),
+    })
+    .from(chunks)
+    .innerJoin(pages, eq(pages.id, chunks.pageId))
+    .where(eq(pages.sourceId, sourceId));
 
   return (
-    stats[0] || {
+    result[0] || {
       total_chunks: 0,
       chunks_with_embeddings: 0,
       avg_chunk_length: 0,
@@ -202,20 +173,17 @@ export async function findChunksWithoutEmbeddings(
   sourceId: string,
   limit = 100
 ) {
-  return prisma.chunk.findMany({
-    where: {
-      page: {
-        sourceId,
-      },
-    },
-    select: {
-      id: true,
-      pageId: true,
-      content: true,
-      chunkIndex: true,
-    },
-    take: limit,
-  });
+  return await db
+    .select({
+      id: chunks.id,
+      pageId: chunks.pageId,
+      content: chunks.content,
+      chunkIndex: chunks.chunkIndex,
+    })
+    .from(chunks)
+    .innerJoin(pages, eq(pages.id, chunks.pageId))
+    .where(and(eq(pages.sourceId, sourceId), isNull(chunks.embedding)))
+    .limit(limit);
 }
 
 /**
@@ -225,13 +193,10 @@ export async function updateChunkEmbedding(
   chunkId: string,
   embedding: number[]
 ) {
-  const embeddingStr = `[${embedding.join(",")}]`;
-
-  await prisma.$executeRawUnsafe(`
-    UPDATE chunks
-    SET embedding = '${embeddingStr}'::vector
-    WHERE id = '${chunkId}'::uuid
-  `);
+  await db
+    .update(chunks)
+    .set({ embedding })
+    .where(eq(chunks.id, chunkId));
 
   return { success: true };
 }
@@ -242,17 +207,14 @@ export async function updateChunkEmbedding(
 export async function batchUpdateEmbeddings(
   updates: Array<{ id: string; embedding: number[] }>
 ) {
-  // Use transaction for batch updates
-  const queries = updates.map((update) => {
-    const embeddingStr = `[${update.embedding.join(",")}]`;
-    return prisma.$executeRawUnsafe(`
-      UPDATE chunks
-      SET embedding = '${embeddingStr}'::vector
-      WHERE id = '${update.id}'::uuid
-    `);
+  await db.transaction(async (tx) => {
+    for (const update of updates) {
+      await tx
+        .update(chunks)
+        .set({ embedding: update.embedding })
+        .where(eq(chunks.id, update.id));
+    }
   });
-
-  await prisma.$transaction(queries);
 
   return { count: updates.length };
 }

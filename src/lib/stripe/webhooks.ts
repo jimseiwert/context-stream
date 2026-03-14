@@ -2,7 +2,7 @@
 // Processes Stripe events and updates subscription status
 
 import { prisma } from "@/lib/db";
-import { PlanTier, SubscriptionStatus } from "@prisma/client";
+import { PlanTier, SubscriptionStatus } from "@/lib/db";
 import Stripe from "stripe";
 import { PLANS } from "../subscriptions/plans";
 import { getNextResetDate } from "../subscriptions/usage-tracker";

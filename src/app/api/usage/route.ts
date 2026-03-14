@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     // If no subscription exists (for existing users before this feature), create one
     if (!subscription) {
-      const { PlanTier } = await import("@prisma/client");
+      const { PlanTier } = await import("@/lib/db");
       const { PLANS } = await import("@/lib/subscriptions/plans");
       const freePlan = PLANS[PlanTier.FREE];
       const now = new Date();

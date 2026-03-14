@@ -136,8 +136,8 @@ function calculateFrameworkMatch(
   }
 
   // Check if source domain matches any framework domain
-  const domainMatch = parsed.frameworks.some((fw) =>
-    fw.domains.some((domain) => result.source.domain.includes(domain))
+  const domainMatch = parsed.frameworks.some((fw: any) =>
+    fw.domains.some((domain: any) => result.source.domain.includes(domain))
   )
 
   if (domainMatch) {
@@ -145,10 +145,10 @@ function calculateFrameworkMatch(
   }
 
   // Check if source tags match framework
-  const frameworkTags = parsed.frameworks.map((f) => `framework:${f.name}`)
+  const frameworkTags = parsed.frameworks.map((f: any) => `framework:${f.name}`)
   const tagMatch =
     result.source.tags &&
-    result.source.tags.some((tag) => frameworkTags.includes(tag))
+    result.source.tags.some((tag: any) => frameworkTags.includes(tag))
 
   if (tagMatch) {
     return SIGNAL_WEIGHTS.frameworkMatch
@@ -196,7 +196,7 @@ function calculateTitleMatch(titleLower: string, parsed: ParsedQuery): number {
     return 1.0
   }
 
-  const allTermsInTitle = parsed.requiredTerms.every((term) =>
+  const allTermsInTitle = parsed.requiredTerms.every((term: any) =>
     titleLower.includes(term)
   )
 
@@ -205,7 +205,7 @@ function calculateTitleMatch(titleLower: string, parsed: ParsedQuery): number {
   }
 
   // Partial match: at least half the terms in title
-  const matchCount = parsed.requiredTerms.filter((term) =>
+  const matchCount = parsed.requiredTerms.filter((term: any) =>
     titleLower.includes(term)
   ).length
 
@@ -342,7 +342,7 @@ async function calculateUserFeedback(pageId: string): Promise<number> {
  * Calculate final multiplier from all signals
  */
 function calculateMultiplier(signals: RerankingSignals): number {
-  return Object.values(signals).reduce((acc, signal) => acc * signal, 1.0)
+  return Object.values(signals).reduce((acc: any, signal: any) => acc * signal, 1.0)
 }
 
 /**

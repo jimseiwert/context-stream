@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const configs = await getAllEmbeddingConfigs();
 
     // Mask API keys before returning to UI
-    const configsWithMaskedKeys = configs.map(config => ({
+    const configsWithMaskedKeys = configs.map((config: any) => ({
       id: config.id,
       provider: config.provider,
       model: config.model,

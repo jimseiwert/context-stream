@@ -8,7 +8,6 @@
 
 import { getApiSession } from "@/lib/auth/api";
 import { prisma } from "@/lib/db";
-import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -88,7 +87,7 @@ export async function DELETE(
           pagesCount: source._count.pages,
           jobsCount: source._count.jobs,
         },
-        after: Prisma.JsonNull,
+        after: null,
         reason: `Admin deleted ${source.scope.toLowerCase()} source`,
       },
     });

@@ -101,7 +101,7 @@ export async function GET(
     if (source.scope !== "GLOBAL") {
       // For workspace sources, check if user has access
       const hasAccess = source.workspaceSources.some(
-        ws => ws.workspace.ownerId === session.user.id
+        (ws: any) => ws.workspace.ownerId === session.user.id
       );
 
       if (!hasAccess) {
@@ -118,7 +118,7 @@ export async function GET(
       // For DOCUMENT sources, use documents count; for others use pages count
       pageCount: source.type === 'DOCUMENT' ? source._count.documents : source._count.pages,
       workspaceCount: source._count.workspaceSources,
-      scrapeJobs: jobs.map((job) => ({
+      scrapeJobs: jobs.map((job: any) => ({
         id: job.id,
         status: job.status,
         startedAt: job.startedAt || job.createdAt,
@@ -129,7 +129,7 @@ export async function GET(
           : ((job.progress as any)?.completed || 0),
         errorMessage: job.errorMessage,
       })),
-      pages: pages.map((page) => ({
+      pages: pages.map((page: any) => ({
         id: page.id,
         url: page.url,
         title: page.title,

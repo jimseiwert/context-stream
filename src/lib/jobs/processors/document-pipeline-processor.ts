@@ -20,7 +20,7 @@ import {
 import { chunkText } from '@/lib/embeddings/chunker'
 import { getEmbeddingProvider } from '@/lib/embeddings/provider'
 import { getActiveEmbeddingConfig } from '@/lib/embeddings/config'
-import { DocumentType } from '@prisma/client'
+import { DocumentType } from "@/lib/db"
 import { createHash } from 'crypto'
 
 export interface DocumentProcessingOptions {

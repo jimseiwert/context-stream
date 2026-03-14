@@ -15,7 +15,7 @@ import {
   getPriceId,
   updateSubscriptionPlan,
 } from "@/lib/stripe/client";
-import { PlanTier } from "@prisma/client";
+import { PlanTier } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 

@@ -100,7 +100,7 @@ async function searchDocumentation(
   // 1. Parse query to detect frameworks and intent
   const parsed = parseQuery(query)
   console.log('[MCP] Parsed query:', {
-    frameworks: parsed.frameworks.map((f) => f.name),
+    frameworks: parsed.frameworks.map((f: any) => f.name),
     keywords: parsed.keywords,
     intent: parsed.intent,
   })
@@ -172,7 +172,7 @@ async function searchDocumentation(
     select: { id: true },
   })
 
-  const baseSourceIds = sources.map((s) => s.id)
+  const baseSourceIds = sources.map((s: any) => s.id)
 
   if (baseSourceIds.length === 0) {
     return {
@@ -246,7 +246,7 @@ async function searchDocumentation(
   await searchCache.set(query, sourceIds, optimized, { sessionId: session.id })
 
   // 12. Update session
-  const shownPageIds = reranked.slice(0, limit).map((r) => r.pageId)
+  const shownPageIds = reranked.slice(0, limit).map((r: any) => r.pageId)
   await sessionManager.addShownPages(session.id, shownPageIds)
   await sessionManager.addQuery(session.id, query, optimized.length)
 

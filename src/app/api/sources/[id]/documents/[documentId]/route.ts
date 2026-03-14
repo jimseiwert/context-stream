@@ -47,7 +47,7 @@ export async function DELETE(
     // Check if user has access to this source
     const hasAccess =
       source.scope === 'GLOBAL' ||
-      source.workspaceSources.some((ws) => ws.workspace.ownerId === session.user.id)
+      source.workspaceSources.some((ws: any) => ws.workspace.ownerId === session.user.id)
 
     if (!hasAccess) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })

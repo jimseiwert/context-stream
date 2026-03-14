@@ -34,7 +34,7 @@ export function chunkText(text: string, config: ChunkConfig): Chunk[] {
   }
 
   // Split into paragraphs first
-  const paragraphs = text.split(/\n\n+/).filter((p) => p.trim().length > 0)
+  const paragraphs = text.split(/\n\n+/).filter((p: any) => p.trim().length > 0)
 
   let currentChunk = ''
   let currentStart = 0

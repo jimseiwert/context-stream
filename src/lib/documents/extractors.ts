@@ -4,7 +4,7 @@
  * All extractors are air-gap compatible (no external API calls)
  */
 
-import { DocumentType } from '@prisma/client'
+import { DocumentType } from "@/lib/db"
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
 import { fileTypeFromBuffer } from 'file-type'
@@ -195,19 +195,19 @@ async function extractDOCX(buffer: Buffer): Promise<ExtractionResult> {
 async function extractCSV(buffer: Buffer): Promise<ExtractionResult> {
   try {
     const text = buffer.toString('utf-8')
-    const lines = text.split('\n').filter((line) => line.trim())
+    const lines = text.split('\n').filter((line: any) => line.trim())
 
     // Parse CSV manually (simple approach)
-    const rows = lines.map((line) =>
-      line.split(',').map((cell) => cell.trim().replace(/^"|"$/g, ''))
+    const rows = lines.map((line: any) =>
+      line.split(',').map((cell: any) => cell.trim().replace(/^"|"$/g, ''))
     )
 
     // Format as readable text
     const [headers, ...dataRows] = rows
     const formattedText = dataRows
-      .map((row) => {
+      .map((row: any) => {
         return headers
-          .map((header, i) => `${header}: ${row[i] || ''}`)
+          .map((header: any, i: any) => `${header}: ${row[i] || ''}`)
           .join('\n')
       })
       .join('\n\n')

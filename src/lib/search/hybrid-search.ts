@@ -50,7 +50,7 @@ export class HybridSearch {
       workspaceId,
       sourceIds
     );
-    const availableSourceIds = availableSources.map((s) => s.id);
+    const availableSourceIds = availableSources.map((s: any) => s.id);
 
     if (availableSourceIds.length === 0) {
       return {
@@ -70,7 +70,7 @@ export class HybridSearch {
     const combined = this.reciprocalRankFusion(ftsResults, vectorResults);
 
     // 5. Fetch page details
-    const pageIds = combined.slice(offset, offset + limit).map((r) => r.id);
+    const pageIds = combined.slice(offset, offset + limit).map((r: any) => r.id);
     const pages = await prisma.page.findMany({
       where: { id: { in: pageIds } },
       include: {
@@ -86,13 +86,13 @@ export class HybridSearch {
     });
 
     // 6. Format results
-    const results: SearchResult[] = pages.map((p) => ({
+    const results: SearchResult[] = pages.map((p: any) => ({
       id: p.id,
       pageId: p.id,
       title: p.title,
       snippet: this.extractSnippet(p.contentText, query),
       url: p.url,
-      score: combined.find((r) => r.id === p.id)?.score || 0,
+      score: combined.find((r: any) => r.id === p.id)?.score || 0,
       source: {
         name: p.source.domain,
         domain: p.source.domain,
@@ -106,7 +106,7 @@ export class HybridSearch {
     await this.logQuery({
       query,
       workspaceId,
-      sourceIds: Array.from(new Set(pages.map((p) => p.source.id))),
+      sourceIds: Array.from(new Set(pages.map((p: any) => p.source.id))),
       resultsCount: results.length,
       latencyMs: Date.now() - startTime,
     });
@@ -321,8 +321,8 @@ export async function getFilteredSources(
 
     // Check if source domain matches any detected framework
     if (parsed.frameworks.length > 0) {
-      const domainMatch = parsed.frameworks.some((fw) =>
-        fw.domains.some((domain) => source.domain.includes(domain))
+      const domainMatch = parsed.frameworks.some((fw: any) =>
+        fw.domains.some((domain: any) => source.domain.includes(domain))
       );
 
       if (domainMatch) {
@@ -330,9 +330,9 @@ export async function getFilteredSources(
       }
 
       // Check if source has framework tags
-      const frameworkTags = parsed.frameworks.map((f) => `framework:${f.name}`);
+      const frameworkTags = parsed.frameworks.map((f: any) => `framework:${f.name}`);
       const tagMatch =
-        source.tags && source.tags.some((tag) => frameworkTags.includes(tag));
+        source.tags && source.tags.some((tag: any) => frameworkTags.includes(tag));
 
       if (tagMatch) {
         boost = Math.max(boost, 1.5); // Moderate boost for tag match
@@ -450,7 +450,7 @@ export async function hybridSearch(
     { text: number; vector: number; combined: number }
   >();
 
-  ftsResults.forEach((result, index) => {
+  ftsResults.forEach((result: any, index: any) => {
     const score = 1 / (k + index + 1);
     scores.set(result.id, {
       text: score,
@@ -459,7 +459,7 @@ export async function hybridSearch(
     });
   });
 
-  vectorResults.forEach((result, index) => {
+  vectorResults.forEach((result: any, index: any) => {
     const score = 1 / (k + index + 1);
     const existing = scores.get(result.id);
     if (existing) {
@@ -527,7 +527,7 @@ export async function hybridSearch(
   const results: RerankableResult[] = [];
 
   // Add page results
-  pages.forEach((page) => {
+  pages.forEach((page: any) => {
     const pageScores = scores.get(page.id)!;
     results.push({
       pageId: page.id,
@@ -550,7 +550,7 @@ export async function hybridSearch(
   });
 
   // Add document results
-  documents.forEach((doc) => {
+  documents.forEach((doc: any) => {
     const docScores = scores.get(doc.id)!;
     results.push({
       pageId: doc.id,

@@ -4,7 +4,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { PlanTier } from '@prisma/client'
+import { PlanTier } from "@/lib/db"
 
 export interface Subscription {
   id: string

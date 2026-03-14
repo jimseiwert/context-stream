@@ -2,7 +2,7 @@
 // Tracks user actions and updates subscription usage counters
 
 import { prisma } from '@/lib/db'
-import { UsageEventType } from '@prisma/client'
+import { UsageEventType } from "@/lib/db"
 import { IS_SAAS_MODE } from '@/lib/config/features'
 
 export interface TrackUsageParams {
@@ -207,7 +207,7 @@ export async function getUsageSummary(
     },
   })
 
-  return events.reduce((acc, event) => {
+  return events.reduce((acc: any, event: any) => {
     acc[event.eventType] = event._sum.count || 0
     return acc
   }, {} as Record<string, number>)

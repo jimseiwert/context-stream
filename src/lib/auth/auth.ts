@@ -3,7 +3,7 @@
 
 import { prisma } from "@/lib/db";
 import { PLANS } from "@/lib/subscriptions/plans";
-import { PlanTier } from "@prisma/client";
+import { PlanTier } from "@/lib/db";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 

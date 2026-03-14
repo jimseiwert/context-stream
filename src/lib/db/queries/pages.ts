@@ -1,9 +1,10 @@
-// Page Management Queries
+// Page Management Queries - Drizzle ORM
 // Handles all database operations for Pages and their content
 
-import { prisma } from "@/lib/db";
-import { Prisma } from "@prisma/client";
+import { and, count, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { createHash } from "crypto";
+import { db } from "@/lib/db";
+import { chunks, pages, sources } from "@/lib/db/schema";
 
 export interface CreatePageParams {
   sourceId: string;
@@ -11,7 +12,7 @@ export interface CreatePageParams {
   title: string | null;
   contentText: string;
   contentHtml: string | null;
-  metadata?: Prisma.JsonValue;
+  metadata?: unknown;
 }
 
 /**
@@ -24,14 +25,15 @@ export async function upsertPage(params: CreatePageParams) {
     .digest("hex");
 
   // Check if page exists
-  const existing = await prisma.page.findUnique({
-    where: {
-      sourceId_url: {
-        sourceId: params.sourceId,
-        url: params.url,
-      },
+  const existing = await db.query.pages.findFirst({
+    where: and(
+      eq(pages.sourceId, params.sourceId),
+      eq(pages.url, params.url)
+    ),
+    columns: {
+      id: true,
+      checksum: true,
     },
-    select: { id: true, checksum: true },
   });
 
   // If content hasn't changed, skip update
@@ -39,31 +41,30 @@ export async function upsertPage(params: CreatePageParams) {
     return { page: existing, updated: false };
   }
 
-  const page = await prisma.page.upsert({
-    where: {
-      sourceId_url: {
-        sourceId: params.sourceId,
-        url: params.url,
-      },
-    },
-    create: {
+  // Upsert the page
+  const [page] = await db
+    .insert(pages)
+    .values({
       sourceId: params.sourceId,
       url: params.url,
       title: params.title,
       contentText: params.contentText,
       contentHtml: params.contentHtml,
-      metadata: params.metadata as Prisma.InputJsonValue,
+      metadata: params.metadata,
       checksum,
-    },
-    update: {
-      title: params.title,
-      contentText: params.contentText,
-      contentHtml: params.contentHtml,
-      metadata: params.metadata as Prisma.InputJsonValue,
-      checksum,
-      updatedAt: new Date(),
-    },
-  });
+    })
+    .onConflictDoUpdate({
+      target: [pages.sourceId, pages.url],
+      set: {
+        title: params.title,
+        contentText: params.contentText,
+        contentHtml: params.contentHtml,
+        metadata: params.metadata,
+        checksum,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
 
   return { page, updated: !!existing };
 }
@@ -72,11 +73,11 @@ export async function upsertPage(params: CreatePageParams) {
  * Get page by ID with chunks
  */
 export async function getPageById(pageId: string) {
-  return prisma.page.findUnique({
-    where: { id: pageId },
-    include: {
+  const page = await db.query.pages.findFirst({
+    where: eq(pages.id, pageId),
+    with: {
       source: {
-        select: {
+        columns: {
           id: true,
           url: true,
           domain: true,
@@ -84,8 +85,8 @@ export async function getPageById(pageId: string) {
         },
       },
       chunks: {
-        orderBy: { chunkIndex: "asc" },
-        select: {
+        orderBy: chunks.chunkIndex,
+        columns: {
           id: true,
           chunkIndex: true,
           content: true,
@@ -94,6 +95,8 @@ export async function getPageById(pageId: string) {
       },
     },
   });
+
+  return page;
 }
 
 /**
@@ -105,29 +108,46 @@ export async function getPagesBySource(
 ) {
   const { limit = 50, offset = 0 } = params;
 
-  const [pages, total] = await prisma.$transaction([
-    prisma.page.findMany({
-      where: { sourceId },
-      select: {
-        id: true,
-        url: true,
-        title: true,
-        indexedAt: true,
-        updatedAt: true,
-        _count: {
-          select: { chunks: true },
-        },
-      },
-      orderBy: { indexedAt: "desc" },
-      skip: offset,
-      take: limit,
-    }),
-    prisma.page.count({
-      where: { sourceId },
-    }),
+  const pagesQuery = db
+    .select({
+      id: pages.id,
+      url: pages.url,
+      title: pages.title,
+      indexedAt: pages.indexedAt,
+      updatedAt: pages.updatedAt,
+      chunkCount: count(chunks.id),
+    })
+    .from(pages)
+    .leftJoin(chunks, eq(chunks.pageId, pages.id))
+    .where(eq(pages.sourceId, sourceId))
+    .groupBy(pages.id)
+    .orderBy(desc(pages.indexedAt))
+    .limit(limit)
+    .offset(offset);
+
+  const totalQuery = db
+    .select({ count: count() })
+    .from(pages)
+    .where(eq(pages.sourceId, sourceId));
+
+  const [pagesResult, totalResult] = await Promise.all([
+    pagesQuery,
+    totalQuery,
   ]);
 
-  return { pages, total };
+  return {
+    pages: pagesResult.map((row: any) => ({
+      id: row.id,
+      url: row.url,
+      title: row.title,
+      indexedAt: row.indexedAt,
+      updatedAt: row.updatedAt,
+      _count: {
+        chunks: row.chunkCount,
+      },
+    })),
+    total: totalResult[0]?.count || 0,
+  };
 }
 
 /**
@@ -139,15 +159,13 @@ export async function searchPages(
   limit = 20
 ) {
   // Use PostgreSQL full-text search
-  const pages = await prisma.$queryRaw<
-    Array<{
-      id: string;
-      title: string | null;
-      url: string;
-      source_id: string;
-      rank: number;
-    }>
-  >`
+  const result = await db.execute<{
+    id: string;
+    title: string | null;
+    url: string;
+    source_id: string;
+    rank: number;
+  }>(sql`
     SELECT
       p.id,
       p.title,
@@ -162,83 +180,75 @@ export async function searchPages(
       AND to_tsvector('english', p."contentText") @@ plainto_tsquery('english', ${query})
     ORDER BY rank DESC
     LIMIT ${limit}
-  `;
+  `);
 
-  return pages;
+  return result as any;
 }
 
 /**
  * Delete pages for a source (typically before re-scraping)
  */
 export async function deletePagesBySource(sourceId: string) {
-  return prisma.page.deleteMany({
-    where: { sourceId },
-  });
+  return await db.delete(pages).where(eq(pages.sourceId, sourceId));
 }
 
 /**
  * Delete a specific page
  */
 export async function deletePage(pageId: string) {
-  return prisma.page.delete({
-    where: { id: pageId },
-  });
+  return await db.delete(pages).where(eq(pages.id, pageId));
 }
 
 /**
  * Get page statistics for a source
  */
 export async function getSourcePageStats(sourceId: string) {
-  const stats = await prisma.page.aggregate({
-    where: { sourceId },
-    _count: true,
-    _min: { indexedAt: true },
-    _max: { indexedAt: true, updatedAt: true },
-  });
+  const stats = await db
+    .select({
+      totalPages: count(),
+      firstIndexed: sql<Date>`MIN(${pages.indexedAt})`,
+      lastIndexed: sql<Date>`MAX(${pages.indexedAt})`,
+      lastUpdated: sql<Date>`MAX(${pages.updatedAt})`,
+    })
+    .from(pages)
+    .where(eq(pages.sourceId, sourceId));
 
   return {
-    totalPages: stats._count,
-    firstIndexed: stats._min.indexedAt,
-    lastIndexed: stats._max.indexedAt,
-    lastUpdated: stats._max.updatedAt,
+    totalPages: stats[0]?.totalPages || 0,
+    firstIndexed: stats[0]?.firstIndexed || null,
+    lastIndexed: stats[0]?.lastIndexed || null,
+    lastUpdated: stats[0]?.lastUpdated || null,
   };
 }
 
 /**
  * Batch create pages (for bulk import)
  */
-export async function batchCreatePages(pages: CreatePageParams[]) {
-  const data = pages.map((page) => ({
+export async function batchCreatePages(pagesData: CreatePageParams[]) {
+  const data = pagesData.map((page: any) => ({
     sourceId: page.sourceId,
     url: page.url,
     title: page.title,
     contentText: page.contentText,
     contentHtml: page.contentHtml,
-    metadata: page.metadata || Prisma.JsonNull,
+    metadata: page.metadata,
     checksum: createHash("sha256").update(page.contentText).digest("hex"),
   }));
 
-  // Use createMany for bulk insert
-  // Note: This will skip existing pages (no update)
-  return prisma.page.createMany({
-    data,
-    skipDuplicates: true,
-  });
+  // Use insert with onConflictDoNothing for bulk insert
+  return await db.insert(pages).values(data).onConflictDoNothing();
 }
 
 /**
  * Find outdated pages (for incremental updates)
  */
 export async function findOutdatedPages(sourceId: string, olderThan: Date) {
-  return prisma.page.findMany({
-    where: {
-      sourceId,
-      updatedAt: { lt: olderThan },
-    },
-    select: {
-      id: true,
-      url: true,
-      checksum: true,
-    },
-  });
+  return await db
+    .select({
+      id: pages.id,
+      url: pages.url,
+      checksum: pages.checksum,
+    })
+    .from(pages)
+    .where(and(eq(pages.sourceId, sourceId), lt(pages.updatedAt, olderThan)));
 }

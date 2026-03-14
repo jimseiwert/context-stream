@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Format users for response
-    const formattedUsers = users.map((user) => ({
+    const formattedUsers = users.map((user: any) => ({
       id: user.id,
       name: user.name || "Unknown",
       email: user.email,

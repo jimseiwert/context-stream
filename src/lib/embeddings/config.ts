@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db'
 import { decryptApiKey } from '@/lib/utils/encryption'
-import type { EmbeddingProvider } from '@prisma/client'
+import type { EmbeddingProvider } from "@/lib/db"
 
 /**
  * Embedding provider configuration with decrypted API key

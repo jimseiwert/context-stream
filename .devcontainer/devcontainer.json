@@ -3,6 +3,7 @@
   "dockerComposeFile": "../docker/docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/app",
+  "overrideCommand": false,
 
   "customizations": {
     "vscode": {
@@ -80,9 +81,15 @@
     }
   },
 
-  "postCreateCommand": "sudo chown -R node:node /app && npm install && npx prisma generate",
+  "remoteUser": "node",
+
+  "initializeCommand": "echo 'Starting dev container...'",
 
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
-  }
+  },
+
+  "waitFor": "onCreateCommand",
+
+  "onCreateCommand": "sudo chown -R node:node /app/node_modules /app/.next 2>/dev/null || true && npm install"
 }

@@ -1,7 +1,7 @@
 // Scraper Orchestrator
 // Main coordinator for web scraping operations
 
-import { SourceType } from '@prisma/client'
+import { SourceType } from "@/lib/db"
 import { ContentExtractor } from './content-extractor'
 import { URLDiscovery } from './url-discovery'
 import { RobotsParser } from './robots-parser'
@@ -109,7 +109,7 @@ export class ScraperOrchestrator {
       const batch = urls.slice(i, i + concurrency)
 
       const results = await Promise.allSettled(
-        batch.map((url) =>
+        batch.map((url: any) =>
           this.scrapePage(url, config.timeout).catch((error) => {
             console.error(`Failed to scrape ${url}:`, error.message)
             errorCount++
