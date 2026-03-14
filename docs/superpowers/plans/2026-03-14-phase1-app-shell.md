@@ -1354,6 +1354,216 @@ Mark https://github.com/jimseiwert/context-stream/issues/20 as complete.
 
 ---
 
+---
+
+## Chunk 8: Tests
+
+> **Prerequisite:** Phase 0 (#31) installs Vitest and Playwright. If Phase 0 is not yet done, install them manually per the instructions in that issue before running these tasks.
+
+### Task 10: Unit tests for shell utilities
+
+**Files:**
+- Create: `src/contexts/__tests__/shell-context.test.tsx`
+- Create: `src/lib/auth/__tests__/permissions.test.ts`
+
+- [ ] **Step 1: Write ShellContext unit tests**
+
+```tsx
+// src/contexts/__tests__/shell-context.test.tsx
+import { renderHook, act } from "@testing-library/react";
+import { ShellProvider, useShell } from "../shell-context";
+
+describe("ShellContext", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("defaults to expanded (not collapsed)", () => {
+    const { result } = renderHook(() => useShell(), {
+      wrapper: ShellProvider,
+    });
+    expect(result.current.sidebarCollapsed).toBe(false);
+  });
+
+  it("toggles sidebar state", () => {
+    const { result } = renderHook(() => useShell(), {
+      wrapper: ShellProvider,
+    });
+    act(() => result.current.toggleSidebar());
+    expect(result.current.sidebarCollapsed).toBe(true);
+    act(() => result.current.toggleSidebar());
+    expect(result.current.sidebarCollapsed).toBe(false);
+  });
+
+  it("persists collapsed state to localStorage", () => {
+    const { result } = renderHook(() => useShell(), {
+      wrapper: ShellProvider,
+    });
+    act(() => result.current.toggleSidebar());
+    expect(localStorage.getItem("cs-sidebar-collapsed")).toBe("true");
+  });
+
+  it("throws if used outside ShellProvider", () => {
+    expect(() => renderHook(() => useShell())).toThrow(
+      "useShell must be used inside ShellProvider"
+    );
+  });
+});
+```
+
+- [ ] **Step 2: Write permissions unit tests**
+
+```ts
+// src/lib/auth/__tests__/permissions.test.ts
+import { describe, it, expect } from "vitest";
+import {
+  hasPermission,
+  hasAnyPermission,
+  isAdmin,
+  isSuperAdmin,
+  Permission,
+} from "../permissions";
+import { UserRole } from "@/lib/db";
+
+describe("permissions", () => {
+  it("SUPER_ADMIN has all permissions", () => {
+    expect(hasPermission(UserRole.SUPER_ADMIN, Permission.MANAGE_GLOBAL_SOURCES)).toBe(true);
+    expect(hasPermission(UserRole.SUPER_ADMIN, Permission.MANAGE_USER_ROLES)).toBe(true);
+  });
+
+  it("USER only has MANAGE_WORKSPACE_SOURCES", () => {
+    expect(hasPermission(UserRole.USER, Permission.MANAGE_WORKSPACE_SOURCES)).toBe(true);
+    expect(hasPermission(UserRole.USER, Permission.VIEW_ADMIN_DASHBOARD)).toBe(false);
+  });
+
+  it("isAdmin returns true for ADMIN and SUPER_ADMIN", () => {
+    expect(isAdmin(UserRole.ADMIN)).toBe(true);
+    expect(isAdmin(UserRole.SUPER_ADMIN)).toBe(true);
+    expect(isAdmin(UserRole.USER)).toBe(false);
+  });
+
+  it("isSuperAdmin only returns true for SUPER_ADMIN", () => {
+    expect(isSuperAdmin(UserRole.SUPER_ADMIN)).toBe(true);
+    expect(isSuperAdmin(UserRole.ADMIN)).toBe(false);
+  });
+
+  it("hasAnyPermission returns true if any permission matches", () => {
+    expect(
+      hasAnyPermission(UserRole.USER, [
+        Permission.MANAGE_WORKSPACE_SOURCES,
+        Permission.VIEW_ADMIN_DASHBOARD,
+      ])
+    ).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 3: Run unit tests**
+
+```bash
+cd /Users/jimseiwert/repos/context-stream && npm test 2>&1 | tail -20
+```
+
+Expected: All tests pass
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/contexts/__tests__/ src/lib/auth/__tests__/
+git commit -m "test(shell): add unit tests for ShellContext and permissions"
+```
+
+### Task 11: E2E tests for auth flow and shell navigation
+
+**Files:**
+- Create: `e2e/auth.spec.ts`
+- Create: `e2e/shell-navigation.spec.ts`
+
+- [ ] **Step 1: Write auth E2E tests**
+
+```ts
+// e2e/auth.spec.ts
+import { test, expect } from "@playwright/test";
+
+test.describe("Authentication", () => {
+  test("unauthenticated user is redirected to login", async ({ page }) => {
+    await page.goto("/dashboard");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("login page renders correctly", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
+    await expect(page.getByLabel(/email/i)).toBeVisible();
+    await expect(page.getByLabel(/password/i)).toBeVisible();
+  });
+
+  test("register page renders correctly", async ({ page }) => {
+    await page.goto("/register");
+    await expect(page.getByRole("heading", { name: /create/i })).toBeVisible();
+  });
+});
+```
+
+- [ ] **Step 2: Write shell navigation E2E tests**
+
+```ts
+// e2e/shell-navigation.spec.ts
+import { test, expect } from "@playwright/test";
+
+// These tests use a seeded test user — requires test DB
+// Skip if TEST_USER_EMAIL env not set
+test.describe("Shell Navigation", () => {
+  test.skip(!process.env.TEST_USER_EMAIL, "requires TEST_USER_EMAIL env");
+
+  test.beforeEach(async ({ page }) => {
+    // Login as test user
+    await page.goto("/login");
+    await page.getByLabel(/email/i).fill(process.env.TEST_USER_EMAIL!);
+    await page.getByLabel(/password/i).fill(process.env.TEST_USER_PASSWORD!);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL("/dashboard");
+  });
+
+  test("sidebar renders with nav items", async ({ page }) => {
+    await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sources" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Jobs" })).toBeVisible();
+  });
+
+  test("sidebar collapses and expands", async ({ page }) => {
+    const toggleBtn = page.getByRole("button", { name: /collapse sidebar/i });
+    await toggleBtn.click();
+    await expect(page.getByText("Sources")).not.toBeVisible();
+    await page.getByRole("button", { name: /expand sidebar/i }).click();
+    await expect(page.getByText("Sources")).toBeVisible();
+  });
+
+  test("command palette opens with ⌘K", async ({ page }) => {
+    await page.keyboard.press("Meta+k");
+    await expect(page.getByPlaceholder("Navigate to...")).toBeVisible();
+    await page.keyboard.press("Escape");
+  });
+});
+```
+
+- [ ] **Step 3: Run E2E tests (auth redirect tests only — no DB required)**
+
+```bash
+cd /Users/jimseiwert/repos/context-stream && npx playwright test e2e/auth.spec.ts 2>&1 | tail -20
+```
+
+Expected: 3 tests pass (redirect + page render tests)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add e2e/
+git commit -m "test(shell): add E2E tests for auth flows and shell navigation"
+```
+
+---
+
 ## Summary
 
 | Task | Files Created/Modified |
@@ -1367,3 +1577,5 @@ Mark https://github.com/jimseiwert/context-stream/issues/20 as complete.
 | 7 | `src/components/layout/command-palette.tsx`, `src/components/ui/command.tsx` |
 | 8 | `src/components/layout/coming-soon.tsx` + 12 route stubs |
 | 9 | `src/app/(authenticated)/dashboard/page.tsx` |
+| 10 | `src/contexts/__tests__/shell-context.test.tsx`, `src/lib/auth/__tests__/permissions.test.ts` |
+| 11 | `e2e/auth.spec.ts`, `e2e/shell-navigation.spec.ts` |
