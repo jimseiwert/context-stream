@@ -2,15 +2,6 @@
 
 export const dynamic = "force-dynamic";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
@@ -122,149 +113,81 @@ export default function RegisterPage() {
   };
 
   return (
-    <Card className="w-full">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
-        <CardDescription>
+    <div style={{ padding: "32px 32px 28px" }}>
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#dce4f0", marginBottom: 6, letterSpacing: "-0.02em" }}>
+          Create an account
+        </h1>
+        <p style={{ fontSize: "0.875rem", color: "#8899bb" }}>
           Get started with ContextStream in minutes
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              placeholder="Alex Thompson"
-              disabled={isLoading}
-              {...register("name")}
-              aria-invalid={!!errors.name}
-              aria-describedby={errors.name ? "name-error" : undefined}
-            />
-            {errors.name && (
-              <p id="name-error" className="text-sm text-destructive">
-                {errors.name.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="alex@example.com"
-              disabled={isLoading}
-              {...register("email")}
-              aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? "email-error" : undefined}
-            />
-            {errors.email && (
-              <p id="email-error" className="text-sm text-destructive">
-                {errors.email.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              disabled={isLoading}
-              {...register("password")}
-              aria-invalid={!!errors.password}
-              aria-describedby={errors.password ? "password-error" : undefined}
-            />
-            {errors.password && (
-              <p id="password-error" className="text-sm text-destructive">
-                {errors.password.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              disabled={isLoading}
-              {...register("confirmPassword")}
-              aria-invalid={!!errors.confirmPassword}
-              aria-describedby={
-                errors.confirmPassword ? "confirmPassword-error" : undefined
-              }
-            />
-            {errors.confirmPassword && (
-              <p
-                id="confirmPassword-error"
-                className="text-sm text-destructive"
-              >
-                {errors.confirmPassword.message}
-              </p>
-            )}
-          </div>
-
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating account...
-              </>
-            ) : (
-              "Create account"
-            )}
-          </Button>
-        </form>
-
-        {authCapabilities?.hasGithub && (
-          <>
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleGithubSignup}
-              disabled={isGithubLoading}
-            >
-              {isGithubLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Github className="mr-2 h-4 w-4" />
-              )}
-              GitHub
-            </Button>
-          </>
-        )}
-
-        <p className="text-xs text-muted-foreground text-center">
-          By creating an account, you agree to our{" "}
-          <Link href="/terms" className="underline hover:text-primary">
-            Terms of Service
-          </Link>{" "}
-          and{" "}
-          <Link href="/privacy" className="underline hover:text-primary">
-            Privacy Policy
-          </Link>
         </p>
-      </CardContent>
-      <CardFooter>
-        <p className="text-sm text-muted-foreground text-center w-full">
-          Already have an account?{" "}
-          <Link href="/login" className="text-primary hover:underline">
-            Sign in
-          </Link>
-        </p>
-      </CardFooter>
-    </Card>
+      </div>
+
+      <form onSubmit={handleSubmit(onSubmit)} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <Label htmlFor="name" style={{ color: "#8899bb", fontSize: "0.8rem" }}>Name</Label>
+          <Input id="name" autoComplete="name" placeholder="Alex Thompson" disabled={isLoading} {...register("name")} aria-invalid={!!errors.name} aria-describedby={errors.name ? "name-error" : undefined} />
+          {errors.name && <p id="name-error" style={{ fontSize: "0.8rem", color: "#f87171" }}>{errors.name.message}</p>}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <Label htmlFor="email" style={{ color: "#8899bb", fontSize: "0.8rem" }}>Email</Label>
+          <Input id="email" type="email" autoComplete="email" placeholder="alex@example.com" disabled={isLoading} {...register("email")} aria-invalid={!!errors.email} aria-describedby={errors.email ? "email-error" : undefined} />
+          {errors.email && <p id="email-error" style={{ fontSize: "0.8rem", color: "#f87171" }}>{errors.email.message}</p>}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <Label htmlFor="password" style={{ color: "#8899bb", fontSize: "0.8rem" }}>Password</Label>
+          <Input id="password" type="password" autoComplete="new-password" disabled={isLoading} {...register("password")} aria-invalid={!!errors.password} aria-describedby={errors.password ? "password-error" : undefined} />
+          {errors.password && <p id="password-error" style={{ fontSize: "0.8rem", color: "#f87171" }}>{errors.password.message}</p>}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <Label htmlFor="confirmPassword" style={{ color: "#8899bb", fontSize: "0.8rem" }}>Confirm Password</Label>
+          <Input id="confirmPassword" type="password" autoComplete="new-password" disabled={isLoading} {...register("confirmPassword")} aria-invalid={!!errors.confirmPassword} aria-describedby={errors.confirmPassword ? "confirmPassword-error" : undefined} />
+          {errors.confirmPassword && <p id="confirmPassword-error" style={{ fontSize: "0.8rem", color: "#f87171" }}>{errors.confirmPassword.message}</p>}
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="pub-g-btn"
+          style={{ width: "100%", padding: "11px", borderRadius: 8, border: "none", cursor: isLoading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: "0.9rem", opacity: isLoading ? 0.7 : 1 }}
+        >
+          {isLoading ? <><Loader2 size={15} className="animate-spin" /> Creating account...</> : "Create account"}
+        </button>
+      </form>
+
+      {authCapabilities?.hasGithub && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0" }}>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+            <span style={{ fontSize: "0.7rem", color: "#8899bb", textTransform: "uppercase", letterSpacing: "0.1em" }}>or continue with</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+          </div>
+          <button
+            onClick={handleGithubSignup}
+            disabled={isGithubLoading}
+            className="pub-ghost-btn"
+            style={{ width: "100%", padding: "10px", borderRadius: 8, cursor: isGithubLoading ? "not-allowed" : "pointer", justifyContent: "center", fontSize: "0.9rem", opacity: isGithubLoading ? 0.7 : 1 }}
+          >
+            {isGithubLoading ? <Loader2 size={15} className="animate-spin" /> : <Github size={15} />}
+            GitHub
+          </button>
+        </>
+      )}
+
+      <p style={{ marginTop: 16, textAlign: "center", fontSize: "0.72rem", color: "#8899bb" }}>
+        By creating an account, you agree to our{" "}
+        <Link href="/terms" style={{ color: "#8899bb", textDecoration: "underline" }}>Terms of Service</Link>{" "}
+        and{" "}
+        <Link href="/privacy" style={{ color: "#8899bb", textDecoration: "underline" }}>Privacy Policy</Link>
+      </p>
+
+      <p style={{ marginTop: 20, textAlign: "center", fontSize: "0.8rem", color: "#8899bb" }}>
+        Already have an account?{" "}
+        <Link href="/login" style={{ color: "#10b981", textDecoration: "none", fontWeight: 600 }}>Sign in</Link>
+      </p>
+    </div>
   );
 }

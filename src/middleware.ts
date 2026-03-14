@@ -48,9 +48,13 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Protected routes that require authentication
+  const protectedRoutes = ['/dashboard', '/sources', '/search', '/settings', '/admin', '/workspaces']
+  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
+
   // If user is not authenticated and tries to access protected routes, redirect to login
   // But first check if this is the login page and no users exist
-  if (!session && !isPublicRoute && pathname !== '/') {
+  if (!session && isProtectedRoute) {
     // Check if accessing login page and no users exist - redirect to register
     if (pathname === '/login') {
       const userCount = await prisma.user.count()

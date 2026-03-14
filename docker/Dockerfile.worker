@@ -9,19 +9,15 @@ FROM node:20-alpine AS deps
 
 WORKDIR /app
 
-# Install dependencies for Prisma and native modules
+# Install dependencies for native modules
 RUN apk add --no-cache openssl libc6-compat
 
 # Copy package files
 COPY package*.json ./
-COPY prisma ./prisma/
 
 # Install dependencies (including tsx for running TypeScript)
 RUN npm ci && \
     npm cache clean --force
-
-# Generate Prisma Client
-RUN npx prisma generate
 
 # ========================================
 # Stage 2: Runner
@@ -39,13 +35,14 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/prisma ./prisma/
 
 # Copy source code
 COPY src ./src
 COPY package*.json ./
 COPY tsconfig.json ./
-COPY scripts ./scripts
+COPY drizzle.config.ts ./
+COPY drizzle ./drizzle/
+COPY scripts/worker-entrypoint.sh ./scripts/worker-entrypoint.sh
 
 # Make entrypoint script executable and set ownership to non-root user
 RUN chmod +x ./scripts/worker-entrypoint.sh && \

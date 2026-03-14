@@ -1,7 +1,7 @@
 import { QueryProvider } from "@/components/providers/query-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Syne } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -17,11 +17,20 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
 });
 
+const syne = Syne({
+  subsets: ["latin"],
+  weight: ["700", "800"],
+  variable: "--font-display",
+});
+
 export const metadata: Metadata = {
-  title: "ContextStream - AI-Accessible Documentation",
+  title: {
+    template: "%s — ContextStream",
+    default: "ContextStream — Make Any Docs AI-Accessible",
+  },
   description:
-    "Make any documentation AI-accessible in minutes with ContextStream's MCP server",
-  keywords: ["documentation", "MCP", "AI", "search", "indexing", "Claude"],
+    "Index your documentation and GitHub repos. Search them from Claude, Cursor, Zed, and any MCP-compatible AI tool. Open source, MIT licensed, self-hostable.",
+  keywords: ["MCP", "documentation search", "AI tools", "Claude MCP", "knowledge base", "RAG", "vector search", "self-hosted documentation"],
   authors: [{ name: "ContextStream" }],
   creator: "ContextStream",
   metadataBase: new URL("https://contextstream.dev"),
@@ -37,24 +46,11 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://contextstream.dev",
-    title: "ContextStream - AI-Accessible Documentation",
-    description: "Make any documentation AI-accessible in minutes",
     siteName: "ContextStream",
-    images: [
-      {
-        url: "/logo.svg",
-        width: 1200,
-        height: 630,
-        alt: "ContextStream Logo",
-      },
-    ],
+    // opengraph-image.tsx in this directory auto-generates the og:image PNG
   },
   twitter: {
     card: "summary_large_image",
-    title: "ContextStream - AI-Accessible Documentation",
-    description: "Make any documentation AI-accessible in minutes",
-    images: ["/logo.svg"],
   },
   robots: {
     index: true,
@@ -77,7 +73,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+        className={`${inter.variable} ${jetbrainsMono.variable} ${syne.variable} font-sans antialiased`}
       >
         <ThemeProvider
           attribute="class"

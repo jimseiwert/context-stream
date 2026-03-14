@@ -1,7 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(cat:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "Bash(docker build:*)",
+      "mcp__playwright__browser_resize",
+      "mcp__playwright__browser_evaluate",
+      "Bash(ls:*)",
+      "mcp__playwright__browser_console_messages",
+      "Bash(npx tsc:*)",
+      "mcp__playwright__browser_click",
+      "mcp__ref__ref_search_documentation"
     ]
-  }
+  },
 }

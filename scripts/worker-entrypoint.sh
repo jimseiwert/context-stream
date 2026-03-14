@@ -37,32 +37,12 @@ fi
 echo "📦 Running database migrations..."
 echo "   Connection URL: $(echo "$MIGRATION_URL" | sed 's/:\/\/[^@]*@/:\/\/***@/')"
 
-# Check if migrations are already applied (doesn't require advisory locks)
-echo "   Checking migration status..."
-MIGRATION_STATUS=$(DATABASE_URL="$MIGRATION_URL" npx prisma migrate status 2>&1 || true)
-
-if echo "$MIGRATION_STATUS" | grep -q "Database schema is up to date"; then
-  echo "   ✓ Database schema is already up to date - skipping migration"
+# Run database migrations
+if DATABASE_URL="$MIGRATION_URL" npx drizzle-kit migrate; then
+  echo "   ✓ Migrations applied successfully"
 else
-  echo "   Running migration deploy..."
-
-  # Try to deploy migrations
-  if DATABASE_URL="$MIGRATION_URL" npx prisma migrate deploy; then
-    echo "   ✓ Migrations deployed successfully"
-  else
-    # Migration failed - check if it's because another container already ran it
-    echo "   ⚠️  Migration deploy failed, verifying schema status..."
-    RECHECK_STATUS=$(DATABASE_URL="$MIGRATION_URL" npx prisma migrate status 2>&1 || true)
-
-    if echo "$RECHECK_STATUS" | grep -q "Database schema is up to date"; then
-      echo "   ✓ Schema is up to date (likely deployed by another container) - continuing"
-    else
-      echo "   ✗ Migration failed and schema is not up to date"
-      echo "   Last status check output:"
-      echo "$RECHECK_STATUS"
-      exit 1
-    fi
-  fi
+  echo "   ✗ Migration failed"
+  exit 1
 fi
 
 # Export the URL with pgbouncer=true for the worker

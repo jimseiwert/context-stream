@@ -5,19 +5,15 @@ FROM node:20-alpine AS deps
 
 WORKDIR /app
 
-# Install dependencies for Prisma and native modules
+# Install dependencies for native modules
 RUN apk add --no-cache openssl libc6-compat
 
 # Copy package files
 COPY package*.json ./
-COPY prisma ./prisma/
 
 # Install ALL dependencies (including dev deps needed for build)
 RUN npm ci && \
     npm cache clean --force
-
-# Generate Prisma Client
-RUN npx prisma generate
 
 # ========================================
 # Stage 1.5: Production Dependencies
@@ -26,19 +22,15 @@ FROM node:20-alpine AS prod-deps
 
 WORKDIR /app
 
-# Install dependencies for Prisma and native modules
+# Install dependencies for native modules
 RUN apk add --no-cache openssl libc6-compat
 
 # Copy package files
 COPY package*.json ./
-COPY prisma ./prisma/
 
 # Install ONLY production dependencies
 RUN npm ci --only=production && \
     npm cache clean --force
-
-# Generate Prisma Client
-RUN npx prisma generate
 
 # ========================================
 # Stage 2: Builder
@@ -52,7 +44,6 @@ RUN apk add --no-cache openssl libc6-compat
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/prisma ./prisma/
 
 # Copy source code
 COPY . .
@@ -89,11 +80,9 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/prisma ./prisma/
-COPY --from=prod-deps /app/node_modules/.prisma ./node_modules/.prisma
-COPY scripts ./scripts
-
-# Make entrypoint script executable
+COPY --from=builder /app/drizzle ./drizzle/
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY scripts/app-entrypoint.sh ./scripts/app-entrypoint.sh
 
 # Set ownership to non-root user
 RUN chmod +x ./scripts/app-entrypoint.sh && \

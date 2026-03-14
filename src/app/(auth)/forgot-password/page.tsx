@@ -1,14 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
@@ -64,74 +55,64 @@ export default function ForgotPasswordPage() {
 
   if (emailSent) {
     return (
-      <Card className="w-full">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Check your email</CardTitle>
-          <CardDescription>
-            We've sent you a password reset link. Please check your email inbox.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <Link
-            href="/login"
-            className="text-sm text-primary hover:underline w-full text-center"
-          >
-            Back to login
-          </Link>
-        </CardFooter>
-      </Card>
+      <div style={{ padding: "32px 32px 28px", textAlign: "center" }}>
+        <div style={{ width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg, rgba(16,185,129,0.14), rgba(6,182,212,0.08))", border: "1px solid rgba(16,185,129,0.25)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </div>
+        <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#dce4f0", marginBottom: 8, letterSpacing: "-0.02em" }}>Check your email</h1>
+        <p style={{ fontSize: "0.875rem", color: "#8899bb", marginBottom: 24 }}>
+          We sent a reset link to your inbox. It may take a minute to arrive.
+        </p>
+        <Link href="/login" style={{ color: "#10b981", fontSize: "0.875rem", fontWeight: 600, textDecoration: "none" }}>
+          Back to login
+        </Link>
+      </div>
     );
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">Forgot password?</CardTitle>
-        <CardDescription>
-          Enter your email address and we'll send you a link to reset your
-          password
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="alex@example.com"
-              disabled={isLoading}
-              {...register("email")}
-              aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? "email-error" : undefined}
-            />
-            {errors.email && (
-              <p id="email-error" className="text-sm text-destructive">
-                {errors.email.message}
-              </p>
-            )}
-          </div>
-
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sending reset link...
-              </>
-            ) : (
-              "Send reset link"
-            )}
-          </Button>
-        </form>
-      </CardContent>
-      <CardFooter>
-        <p className="text-sm text-muted-foreground text-center w-full">
-          Remember your password?{" "}
-          <Link href="/login" className="text-primary hover:underline">
-            Back to login
-          </Link>
+    <div style={{ padding: "32px 32px 28px" }}>
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#dce4f0", marginBottom: 6, letterSpacing: "-0.02em" }}>
+          Forgot password?
+        </h1>
+        <p style={{ fontSize: "0.875rem", color: "#8899bb" }}>
+          Enter your email and we'll send you a link to reset it.
         </p>
-      </CardFooter>
-    </Card>
+      </div>
+
+      <form onSubmit={handleSubmit(onSubmit)} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <Label htmlFor="email" style={{ color: "#8899bb", fontSize: "0.8rem" }}>Email</Label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="alex@example.com"
+            disabled={isLoading}
+            {...register("email")}
+            aria-invalid={!!errors.email}
+            aria-describedby={errors.email ? "email-error" : undefined}
+          />
+          {errors.email && (
+            <p id="email-error" style={{ fontSize: "0.8rem", color: "#f87171" }}>{errors.email.message}</p>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="pub-g-btn"
+          style={{ width: "100%", padding: "11px", borderRadius: 8, border: "none", cursor: isLoading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: "0.9rem", opacity: isLoading ? 0.7 : 1 }}
+        >
+          {isLoading ? <><Loader2 size={15} className="animate-spin" /> Sending...</> : "Send reset link"}
+        </button>
+      </form>
+
+      <p style={{ marginTop: 24, textAlign: "center", fontSize: "0.8rem", color: "#8899bb" }}>
+        Remember it?{" "}
+        <Link href="/login" style={{ color: "#10b981", textDecoration: "none", fontWeight: 600 }}>Back to login</Link>
+      </p>
+    </div>
   );
 }
