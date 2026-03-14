@@ -1,0 +1,48 @@
+auth:
+  - changed-files:
+    - any-glob-to-any-file: 'src/app/(auth)/**'
+    - any-glob-to-any-file: 'src/lib/auth/**'
+
+public:
+  - changed-files:
+    - any-glob-to-any-file: 'src/app/(public)/**'
+
+app:
+  - changed-files:
+    - any-glob-to-any-file: 'src/app/(authenticated)/**'
+    - any-glob-to-any-file: 'src/components/**'
+    - any-glob-to-any-file: 'src/contexts/**'
+
+database:
+  - changed-files:
+    - any-glob-to-any-file: 'src/lib/db/**'
+    - any-glob-to-any-file: 'drizzle/**'
+    - any-glob-to-any-file: 'drizzle.config.ts'
+
+ci:
+  - changed-files:
+    - any-glob-to-any-file: '.github/**'
+
+docker:
+  - changed-files:
+    - any-glob-to-any-file: 'docker/**'
+    - any-glob-to-any-file: 'services/**'
+    - any-glob-to-any-file: '**/Dockerfile*'
+
+docs:
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**'
+    - any-glob-to-any-file: '*.md'
+
+search:
+  - changed-files:
+    - any-glob-to-any-file: 'src/lib/search/**'
+
+embeddings:
+  - changed-files:
+    - any-glob-to-any-file: 'src/lib/embeddings/**'
+
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file: 'package.json'
+    - any-glob-to-any-file: 'package-lock.json'
