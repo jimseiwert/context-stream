@@ -55,7 +55,8 @@ backend/htmlcov/
 .idea/
 *.swp
 *.swo
-
+.husky
+.playwright-mcp
 # Backups
 backups/
 

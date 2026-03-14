@@ -24,6 +24,8 @@ export function Logo({
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         className="flex-shrink-0"
+        aria-hidden="true"
+        focusable="false"
       >
         <defs>
           <linearGradient id="logoGradient1" x1="0%" y1="0%" x2="100%" y2="100%">

@@ -2,15 +2,6 @@
 
 export const dynamic = "force-dynamic";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
@@ -103,107 +94,98 @@ export default function LoginPage() {
   };
 
   return (
-    <Card className="w-full">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-        <CardDescription>
+    <div style={{ padding: "32px 32px 28px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#dce4f0", marginBottom: 6, letterSpacing: "-0.02em" }}>
+          Welcome back
+        </h1>
+        <p style={{ fontSize: "0.875rem", color: "#8899bb" }}>
           Enter your credentials to access your account
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="alex@example.com"
-              disabled={isLoading}
-              {...register("email")}
-              aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? "email-error" : undefined}
-            />
-            {errors.email && (
-              <p id="email-error" className="text-sm text-destructive">
-                {errors.email.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
-              <Link
-                href="/forgot-password"
-                className="text-sm text-muted-foreground hover:text-primary"
-              >
-                Forgot password?
-              </Link>
-            </div>
-            <Input
-              id="password"
-              type="password"
-              disabled={isLoading}
-              {...register("password")}
-              aria-invalid={!!errors.password}
-              aria-describedby={errors.password ? "password-error" : undefined}
-            />
-            {errors.password && (
-              <p id="password-error" className="text-sm text-destructive">
-                {errors.password.message}
-              </p>
-            )}
-          </div>
-
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Signing in...
-              </>
-            ) : (
-              "Sign in"
-            )}
-          </Button>
-        </form>
-
-        {authCapabilities?.hasGithub && (
-          <>
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleGithubLogin}
-              disabled={isGithubLoading}
-            >
-              {isGithubLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Github className="mr-2 h-4 w-4" />
-              )}
-              GitHub
-            </Button>
-          </>
-        )}
-      </CardContent>
-      <CardFooter>
-        <p className="text-sm text-muted-foreground text-center w-full">
-          Don't have an account?{" "}
-          <Link href="/register" className="text-primary hover:underline">
-            Sign up
-          </Link>
         </p>
-      </CardFooter>
-    </Card>
+      </div>
+
+      <form onSubmit={handleSubmit(onSubmit)} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <Label htmlFor="email" style={{ color: "#8899bb", fontSize: "0.8rem" }}>Email</Label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="alex@example.com"
+            disabled={isLoading}
+            {...register("email")}
+            aria-invalid={!!errors.email}
+            aria-describedby={errors.email ? "email-error" : undefined}
+          />
+          {errors.email && (
+            <p id="email-error" style={{ fontSize: "0.8rem", color: "#f87171" }}>
+              {errors.email.message}
+            </p>
+          )}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Label htmlFor="password" style={{ color: "#8899bb", fontSize: "0.8rem" }}>Password</Label>
+            <Link href="/forgot-password" style={{ fontSize: "0.78rem", color: "#8899bb", textDecoration: "none" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "#10b981")}
+              onMouseLeave={e => (e.currentTarget.style.color = "#8899bb")}
+            >
+              Forgot password?
+            </Link>
+          </div>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            disabled={isLoading}
+            {...register("password")}
+            aria-invalid={!!errors.password}
+            aria-describedby={errors.password ? "password-error" : undefined}
+          />
+          {errors.password && (
+            <p id="password-error" style={{ fontSize: "0.8rem", color: "#f87171" }}>
+              {errors.password.message}
+            </p>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="pub-g-btn"
+          style={{ width: "100%", padding: "11px", borderRadius: 8, border: "none", cursor: isLoading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: "0.9rem", opacity: isLoading ? 0.7 : 1 }}
+        >
+          {isLoading ? <><Loader2 size={15} className="animate-spin" /> Signing in...</> : "Sign in"}
+        </button>
+      </form>
+
+      {authCapabilities?.hasGithub && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0" }}>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+            <span style={{ fontSize: "0.7rem", color: "#8899bb", textTransform: "uppercase", letterSpacing: "0.1em" }}>or continue with</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+          </div>
+          <button
+            onClick={handleGithubLogin}
+            disabled={isGithubLoading}
+            className="pub-ghost-btn"
+            style={{ width: "100%", padding: "10px", borderRadius: 8, cursor: isGithubLoading ? "not-allowed" : "pointer", justifyContent: "center", fontSize: "0.9rem", opacity: isGithubLoading ? 0.7 : 1 }}
+          >
+            {isGithubLoading ? <Loader2 size={15} className="animate-spin" /> : <Github size={15} />}
+            GitHub
+          </button>
+        </>
+      )}
+
+      <p style={{ marginTop: 24, textAlign: "center", fontSize: "0.8rem", color: "#8899bb" }}>
+        Don't have an account?{" "}
+        <Link href="/register" style={{ color: "#10b981", textDecoration: "none", fontWeight: 600 }}>
+          Sign up
+        </Link>
+      </p>
+    </div>
   );
 }
