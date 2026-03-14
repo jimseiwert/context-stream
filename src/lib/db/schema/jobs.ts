@@ -11,30 +11,36 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { jobStatusEnum, jobTypeEnum } from "./enums";
+import { jobDispatchModeEnum, jobStatusEnum, jobTypeEnum } from "./enums";
 import { sources } from "./sources";
+import { workspaces } from "./workspaces";
 
 // Job table
 export const jobs = pgTable(
   "Job",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspaceId").references(() => workspaces.id, { onDelete: "cascade" }),
     sourceId: uuid("sourceId")
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
     type: jobTypeEnum("type").notNull(),
     status: jobStatusEnum("status").default("PENDING").notNull(),
+    dispatchMode: jobDispatchModeEnum("dispatchMode").default("INPROCESS").notNull(),
     progress: jsonb("progress"),
     result: jsonb("result"),
+    logs: text("logs"),
     errorMessage: text("errorMessage"),
     startedAt: timestamp("startedAt", { mode: "date" }),
     completedAt: timestamp("completedAt", { mode: "date" }),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
+    workspaceIdIdx: index("Job_workspaceId_idx").on(table.workspaceId),
     sourceIdIdx: index("Job_sourceId_idx").on(table.sourceId),
     statusIdx: index("Job_status_idx").on(table.status),
     typeIdx: index("Job_type_idx").on(table.type),
+    dispatchModeIdx: index("Job_dispatchMode_idx").on(table.dispatchMode),
     createdAtIdx: index("Job_createdAt_idx").on(table.createdAt),
   })
 );

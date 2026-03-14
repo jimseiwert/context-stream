@@ -12,6 +12,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
+import { userRoleEnum } from "./enums";
 import { sources } from "./sources";
 
 // Workspace table
@@ -28,6 +29,31 @@ export const workspaces = pgTable(
   (table) => ({
     ownerIdIdx: index("Workspace_ownerId_idx").on(table.ownerId),
     slugIdx: index("Workspace_slug_idx").on(table.slug),
+  })
+);
+
+// WorkspaceMember table — workspace membership with roles
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspaceId")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: userRoleEnum("role").default("USER").notNull(),
+    invitedAt: timestamp("invitedAt", { mode: "date" }).defaultNow().notNull(),
+    joinedAt: timestamp("joinedAt", { mode: "date" }),
+  },
+  (table) => ({
+    workspaceMemberUnique: uniqueIndex("workspace_members_workspaceId_userId_key").on(
+      table.workspaceId,
+      table.userId
+    ),
+    workspaceIdIdx: index("workspace_members_workspaceId_idx").on(table.workspaceId),
+    userIdIdx: index("workspace_members_userId_idx").on(table.userId),
   })
 );
 
@@ -63,7 +89,19 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
     fields: [workspaces.ownerId],
     references: [users.id],
   }),
+  members: many(workspaceMembers),
   workspaceSources: many(workspaceSources),
+}));
+
+export const workspaceMembersRelations = relations(workspaceMembers, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [workspaceMembers.workspaceId],
+    references: [workspaces.id],
+  }),
+  user: one(users, {
+    fields: [workspaceMembers.userId],
+    references: [users.id],
+  }),
 }));
 
 export const workspaceSourcesRelations = relations(

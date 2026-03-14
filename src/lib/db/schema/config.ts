@@ -11,7 +11,15 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { pgEnum } from "drizzle-orm/pg-core";
 import { embeddingProviderEnum, imageProcessingMethodEnum } from "./enums";
+
+export const vectorStoreProviderEnum = pgEnum("VectorStoreProvider", [
+  "PGVECTOR",
+  "PINECONE",
+  "QDRANT",
+  "WEAVIATE",
+]);
 
 // EmbeddingProviderConfig table
 export const embeddingProviderConfigs = pgTable(
@@ -38,6 +46,24 @@ export const embeddingProviderConfigs = pgTable(
     providerIdx: index("embedding_provider_configs_provider_idx").on(
       table.provider
     ),
+  })
+);
+
+// VectorStoreConfig table
+export const vectorStoreConfigs = pgTable(
+  "vector_store_configs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    provider: vectorStoreProviderEnum("provider").notNull(),
+    connectionEncrypted: text("connectionEncrypted").notNull(),
+    additionalConfig: jsonb("additionalConfig"),
+    isActive: boolean("isActive").default(false).notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    isActiveIdx: index("vector_store_configs_isActive_idx").on(table.isActive),
+    providerIdx: index("vector_store_configs_provider_idx").on(table.provider),
   })
 );
 

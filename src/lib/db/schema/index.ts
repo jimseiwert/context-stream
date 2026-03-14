@@ -13,6 +13,9 @@ export * from "./workspaces";
 // Export source tables and relations
 export * from "./sources";
 
+// Export collection tables and relations
+export * from "./collections";
+
 // Export job tables and relations
 export * from "./jobs";
 

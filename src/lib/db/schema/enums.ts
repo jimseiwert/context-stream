@@ -89,6 +89,13 @@ export const usageEventTypeEnum = pgEnum("UsageEventType", [
   "WORKSPACE_CREATED",
 ]);
 
+// Jobs - dispatch mode
+export const jobDispatchModeEnum = pgEnum("JobDispatchMode", [
+  "INPROCESS",
+  "WORKER",
+  "KUBERNETES",
+]);
+
 // System Configuration
 export const embeddingProviderEnum = pgEnum("EmbeddingProvider", [
   "OPENAI",
@@ -117,6 +124,7 @@ export type SubscriptionStatus = (typeof subscriptionStatusEnum.enumValues)[numb
 export type UsageEventType = (typeof usageEventTypeEnum.enumValues)[number];
 export type EmbeddingProvider = (typeof embeddingProviderEnum.enumValues)[number];
 export type ImageProcessingMethod = (typeof imageProcessingMethodEnum.enumValues)[number];
+export type JobDispatchMode = (typeof jobDispatchModeEnum.enumValues)[number];
 
 // Enum value objects for backwards compatibility (to use as values, not just types)
 export const UserRole = {

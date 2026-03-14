@@ -17,6 +17,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:create": "drizzle-kit generate",
     "db:migrate:deploy": "drizzle-kit migrate",
+    "db:seed": "tsx scripts/seed.ts",
     "db:seed:global-docs": "tsx scripts/seed-global-docs.ts",
     "db:fix:stuck-sources": "tsx local_scripts/fix-stuck-sources.ts",
     "db:fix:source-usage": "tsx local_scripts/fix-source-usage-counts.ts",
