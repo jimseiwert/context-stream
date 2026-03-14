@@ -9,12 +9,47 @@ import {
   documents,
   chunks,
 } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { crawlWebsite } from "@/lib/scraper/website-crawler";
 import { crawlGitHub } from "@/lib/scraper/github-crawler";
 import { chunkText } from "@/lib/embeddings/chunker";
 import { generateEmbeddings } from "@/lib/embeddings/service";
 import crypto from "crypto";
+
+interface JobProgress {
+  pagesFound: number;
+  pagesProcessed: number;
+  chunksCreated: number;
+}
+
+/**
+ * Appends a timestamped log line to the job's logs column.
+ */
+async function appendLog(jobId: string, line: string): Promise<void> {
+  const timestamped = `[${new Date().toISOString()}] ${line}`;
+  await db
+    .update(jobs)
+    .set({
+      logs: sql`COALESCE(logs, '') || ${timestamped + "\n"}`,
+    })
+    .where(eq(jobs.id, jobId))
+    .catch((err) => {
+      console.warn(`[Pipeline] Failed to append log for job ${jobId}:`, err);
+    });
+}
+
+/**
+ * Updates the progress jsonb on the job row.
+ */
+async function updateProgress(jobId: string, progress: JobProgress): Promise<void> {
+  await db
+    .update(jobs)
+    .set({ progress })
+    .where(eq(jobs.id, jobId))
+    .catch((err) => {
+      console.warn(`[Pipeline] Failed to update progress for job ${jobId}:`, err);
+    });
+}
 
 interface SourceConfig {
   maxDepth?: number;
@@ -32,10 +67,11 @@ function computeChecksum(text: string): string {
 /**
  * Processes chunks for a page: chunks the text, generates embeddings, and upserts chunk rows.
  * Deletes old chunks for this page before inserting new ones.
+ * Returns the number of chunks created.
  */
-async function processPageChunks(pageId: string, contentText: string): Promise<void> {
+async function processPageChunks(pageId: string, contentText: string): Promise<number> {
   const textChunks = chunkText(contentText);
-  if (textChunks.length === 0) return;
+  if (textChunks.length === 0) return 0;
 
   const embeddings = await generateEmbeddings(textChunks);
 
@@ -58,14 +94,17 @@ async function processPageChunks(pageId: string, contentText: string): Promise<v
       await db.insert(chunks).values(batch);
     }
   }
+
+  return chunkRows.length;
 }
 
 /**
  * Processes chunks for a document: similar to processPageChunks but uses documentId.
+ * Returns the number of chunks created.
  */
-async function processDocumentChunks(documentId: string, contentText: string): Promise<void> {
+async function processDocumentChunks(documentId: string, contentText: string): Promise<number> {
   const textChunks = chunkText(contentText);
-  if (textChunks.length === 0) return;
+  if (textChunks.length === 0) return 0;
 
   const embeddings = await generateEmbeddings(textChunks);
 
@@ -86,6 +125,8 @@ async function processDocumentChunks(documentId: string, contentText: string): P
       await db.insert(chunks).values(batch);
     }
   }
+
+  return chunkRows.length;
 }
 
 /**
@@ -166,7 +207,11 @@ export async function processDocumentPipeline(
     .set({ status: "RUNNING", startedAt: new Date() })
     .where(eq(jobs.id, jobId));
 
+  const progress: JobProgress = { pagesFound: 0, pagesProcessed: 0, chunksCreated: 0 };
+
   try {
+    await appendLog(jobId, "Starting pipeline...");
+
     // Load source
     const source = await db.query.sources.findFirst({
       where: eq(sources.id, sourceId),
@@ -186,7 +231,8 @@ export async function processDocumentPipeline(
     let pageCount = 0;
 
     if (source.type === "WEBSITE") {
-      // Crawl website
+      await appendLog(jobId, `Starting crawl for ${source.url}...`);
+
       const crawledPages = await crawlWebsite(source.url, {
         maxDepth: config.maxDepth,
         includePatterns: config.includePatterns,
@@ -196,8 +242,15 @@ export async function processDocumentPipeline(
       console.log(
         `[Pipeline] Crawled ${crawledPages.length} pages from ${source.url}`
       );
+      await appendLog(jobId, `Found ${crawledPages.length} pages`);
 
-      for (const crawledPage of crawledPages) {
+      progress.pagesFound = crawledPages.length;
+      await updateProgress(jobId, progress);
+
+      for (let i = 0; i < crawledPages.length; i++) {
+        const crawledPage = crawledPages[i];
+        await appendLog(jobId, `Crawling URL: ${crawledPage.url} (${i + 1}/${crawledPages.length})`);
+
         const pageId = await upsertPage(
           sourceId,
           crawledPage.url,
@@ -205,11 +258,21 @@ export async function processDocumentPipeline(
           crawledPage.contentText,
           crawledPage.metadata as Record<string, unknown>
         );
-        await processPageChunks(pageId, crawledPage.contentText);
+
+        await appendLog(jobId, `Chunking page ${i + 1}/${crawledPages.length}`);
+        const chunkCount = await processPageChunks(pageId, crawledPage.contentText);
+
+        await appendLog(jobId, `Generating embeddings for ${chunkCount} chunks`);
         pageCount++;
+        progress.pagesProcessed = pageCount;
+        progress.chunksCreated += chunkCount;
+        await updateProgress(jobId, progress);
       }
+
+      await appendLog(jobId, "Saving chunks...");
     } else if (source.type === "GITHUB") {
-      // Crawl GitHub repo
+      await appendLog(jobId, `Starting crawl for GitHub repo: ${source.url}...`);
+
       const files = await crawlGitHub(source.url, {
         branch: config.branch,
         pathFilter: config.pathFilter,
@@ -219,9 +282,16 @@ export async function processDocumentPipeline(
       console.log(
         `[Pipeline] Fetched ${files.length} files from ${source.url}`
       );
+      await appendLog(jobId, `Found ${files.length} pages`);
 
-      for (const file of files) {
+      progress.pagesFound = files.length;
+      await updateProgress(jobId, progress);
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const fileUrl = file.metadata.repoUrl;
+        await appendLog(jobId, `Crawling URL: ${fileUrl} (${i + 1}/${files.length})`);
+
         const pageId = await upsertPage(
           sourceId,
           fileUrl,
@@ -229,9 +299,18 @@ export async function processDocumentPipeline(
           file.contentText,
           file.metadata as unknown as Record<string, unknown>
         );
-        await processPageChunks(pageId, file.contentText);
+
+        await appendLog(jobId, `Chunking page ${i + 1}/${files.length}`);
+        const chunkCount = await processPageChunks(pageId, file.contentText);
+
+        await appendLog(jobId, `Generating embeddings for ${chunkCount} chunks`);
         pageCount++;
+        progress.pagesProcessed = pageCount;
+        progress.chunksCreated += chunkCount;
+        await updateProgress(jobId, progress);
       }
+
+      await appendLog(jobId, "Saving chunks...");
     } else if (source.type === "DOCUMENT") {
       // Process existing documents for this source (e.g., after re-index trigger)
       const sourceDocs = await db.query.documents.findMany({
@@ -239,8 +318,16 @@ export async function processDocumentPipeline(
         columns: { id: true, contentText: true },
       });
 
-      for (const doc of sourceDocs) {
-        await processDocumentChunks(doc.id, doc.contentText);
+      await appendLog(jobId, `Found ${sourceDocs.length} pages`);
+      progress.pagesFound = sourceDocs.length;
+      await updateProgress(jobId, progress);
+
+      for (let i = 0; i < sourceDocs.length; i++) {
+        const doc = sourceDocs[i];
+        await appendLog(jobId, `Chunking page ${i + 1}/${sourceDocs.length}`);
+
+        const chunkCount = await processDocumentChunks(doc.id, doc.contentText);
+        await appendLog(jobId, `Generating embeddings for ${chunkCount} chunks`);
 
         // Mark document as indexed
         await db
@@ -249,7 +336,12 @@ export async function processDocumentPipeline(
           .where(eq(documents.id, doc.id));
 
         pageCount++;
+        progress.pagesProcessed = pageCount;
+        progress.chunksCreated += chunkCount;
+        await updateProgress(jobId, progress);
       }
+
+      await appendLog(jobId, "Saving chunks...");
     }
 
     // Update source: ACTIVE + timestamps + page count
@@ -264,6 +356,8 @@ export async function processDocumentPipeline(
       })
       .where(eq(sources.id, sourceId));
 
+    await appendLog(jobId, `Done. Processed ${pageCount} pages and ${progress.chunksCreated} chunks.`);
+
     // Mark job as COMPLETED
     await db
       .update(jobs)
@@ -271,6 +365,7 @@ export async function processDocumentPipeline(
         status: "COMPLETED",
         completedAt: new Date(),
         result: { pageCount },
+        progress,
       })
       .where(eq(jobs.id, jobId));
 
@@ -282,6 +377,7 @@ export async function processDocumentPipeline(
       error instanceof Error ? error.message : "Unknown pipeline error";
 
     console.error(`[Pipeline] Job ${jobId} failed:`, error);
+    await appendLog(jobId, `Error: ${message}`).catch(() => {});
 
     // Mark source as ERROR
     await db
@@ -297,6 +393,7 @@ export async function processDocumentPipeline(
         status: "FAILED",
         completedAt: new Date(),
         errorMessage: message,
+        progress,
       })
       .where(eq(jobs.id, jobId))
       .catch(() => {});
