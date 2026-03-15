@@ -1,6 +1,7 @@
 // Search API Route — GET /api/search
 // Accepts session auth (cookie) or API key (Authorization: Bearer <key>).
 // Delegates to the hybrid search engine.
+// Enforces search quota when NEXT_PUBLIC_SAAS_MODE=true.
 
 import { NextRequest, NextResponse } from "next/server";
 import { hybridSearch } from "@/lib/search/hybrid-search";
@@ -8,6 +9,9 @@ import { parseQuery } from "@/lib/search/query-parser";
 import { validateApiKey, getApiKeyFromHeaders } from "@/lib/auth/api-key";
 import { getOptionalAuth } from "@/lib/auth/middleware";
 import { handleApiError, UnauthorizedError, ValidationError } from "@/lib/utils/errors";
+import { checkQuota, trackUsage } from "@/lib/subscriptions/usage-tracker";
+
+const saasMode = process.env.NEXT_PUBLIC_SAAS_MODE === "true";
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,6 +34,25 @@ export async function GET(request: NextRequest) {
 
     if (!userId) {
       throw new UnauthorizedError("Authentication required");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Quota enforcement (SaaS mode only)
+    // ---------------------------------------------------------------------------
+    if (saasMode) {
+      const quota = await checkQuota(userId, "searches");
+      if (!quota.allowed) {
+        return NextResponse.json(
+          {
+            error: "quota_exceeded",
+            resource: "searches",
+            used: quota.used,
+            limit: quota.limit,
+            upgrade_url: "/settings/billing",
+          },
+          { status: 402 }
+        );
+      }
     }
 
     // ---------------------------------------------------------------------------
@@ -84,6 +107,15 @@ export async function GET(request: NextRequest) {
       limit,
       offset,
     });
+
+    // ---------------------------------------------------------------------------
+    // Track usage (SaaS mode only, fire-and-forget)
+    // ---------------------------------------------------------------------------
+    if (saasMode) {
+      trackUsage(userId, "SEARCH").catch((err) =>
+        console.error("[search] trackUsage failed:", err)
+      );
+    }
 
     return NextResponse.json({
       results,

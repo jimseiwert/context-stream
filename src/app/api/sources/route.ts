@@ -1,4 +1,5 @@
 // Sources API Routes - GET /api/sources, POST /api/sources
+// POST enforces sources quota when NEXT_PUBLIC_SAAS_MODE=true.
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -10,6 +11,9 @@ import {
 } from "@/lib/utils/errors";
 import { eq, or, desc } from "drizzle-orm";
 import { enqueueJob } from "@/lib/jobs/queue";
+import { checkQuota } from "@/lib/subscriptions/usage-tracker";
+
+const saasMode = process.env.NEXT_PUBLIC_SAAS_MODE === "true";
 
 // GET /api/sources — list sources accessible to the authenticated user
 // Returns GLOBAL sources plus workspace-scoped sources linked to the user's workspaces
@@ -68,6 +72,23 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth();
     const userId = session.user.id;
+
+    // Quota enforcement (SaaS mode only)
+    if (saasMode) {
+      const quota = await checkQuota(userId, "sources");
+      if (!quota.allowed) {
+        return NextResponse.json(
+          {
+            error: "quota_exceeded",
+            resource: "sources",
+            used: quota.used,
+            limit: quota.limit,
+            upgrade_url: "/settings/billing",
+          },
+          { status: 402 }
+        );
+      }
+    }
 
     const body = (await request.json()) as Record<string, unknown>;
 

@@ -26,8 +26,8 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     name: 'Free',
     price: 0,
     features: {
-      searchesPerMonth: 50,
-      maxSources: 3,
+      searchesPerMonth: 1000,
+      maxSources: 5,
       maxWorkspaces: 1,
       maxPagesIndexed: 500,
       apiRateLimit: 30,
@@ -48,9 +48,9 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     price: 9,
     stripePriceId: process.env.STRIPE_STARTER_PRICE_ID,
     features: {
-      searchesPerMonth: 1000,
+      searchesPerMonth: 10000,
       maxSources: 20,
-      maxWorkspaces: 3,
+      maxWorkspaces: 1,
       maxPagesIndexed: 5000,
       apiRateLimit: 60,
     },
@@ -70,7 +70,7 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     price: 19,
     stripePriceId: process.env.STRIPE_PRO_PRICE_ID,
     features: {
-      searchesPerMonth: 10000,
+      searchesPerMonth: 100000,
       maxSources: 100,
       maxWorkspaces: 10,
       maxPagesIndexed: 50000,
@@ -92,10 +92,10 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     price: 49,
     stripePriceId: process.env.STRIPE_TEAM_PRICE_ID,
     features: {
-      searchesPerMonth: 50000,
+      searchesPerMonth: 500000,
       maxSources: -1, // Unlimited
-      maxWorkspaces: -1, // Unlimited
-      maxPagesIndexed: 250000,
+      maxWorkspaces: 50,
+      maxPagesIndexed: 200000,
       apiRateLimit: 300,
     },
     description: 'For development teams',
