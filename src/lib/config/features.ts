@@ -43,6 +43,9 @@ export const features = {
   // MCP server support (always enabled)
   mcpServer: true,
 
+  // Kubernetes job dispatch (Mode 3) — enabled via FEATURE_K8S_DISPATCH=true
+  k8s_dispatch: process.env.FEATURE_K8S_DISPATCH === "true",
+
   // Multi-workspace support (always enabled)
   multiWorkspace: true,
 

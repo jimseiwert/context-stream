@@ -11,7 +11,7 @@ import {
 import { auth } from "@/lib/auth/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { eq, gte, count, sql } from "drizzle-orm";
+import { eq, and, gte, count, sql } from "drizzle-orm";
 import {
   Server,
   CheckCircle2,
@@ -20,6 +20,7 @@ import {
   Database,
   Zap,
   Settings,
+  Cpu,
 } from "lucide-react";
 import { SystemTabs } from "@/components/admin/system-tabs";
 import { TestEmbeddingButton } from "@/components/admin/test-embedding-button";
@@ -208,8 +209,15 @@ export default async function AdminSystemPage() {
     (session.user as { role?: string } | undefined)?.role ?? "USER";
   const isSuperAdmin = currentUserRole === "SUPER_ADMIN";
 
+  // Dispatch mode info
+  const dispatchMode = (
+    process.env.DISPATCH_MODE?.toUpperCase() ?? "INPROCESS"
+  ) as "INPROCESS" | "WORKER" | "KUBERNETES";
+
+  const k8sEnabled = process.env.FEATURE_K8S_DISPATCH === "true";
+
   // Parallel data fetches
-  const [dbHealth, chunkCountResult, embeddingConfigs, vsConfigs, jobCounts] =
+  const [dbHealth, chunkCountResult, embeddingConfigs, vsConfigs, jobCounts, activeWorkerCount] =
     await Promise.all([
       getDatabaseHealth(),
       db.select({ count: count() }).from(chunks),
@@ -264,6 +272,23 @@ export default async function AdminSystemPage() {
           completed: Number(completed?.count ?? 0),
           failed: Number(failed?.count ?? 0),
         };
+      })(),
+      // Count Mode 2 workers with a recent heartbeat (within last 2 minutes)
+      (async () => {
+        const heartbeatCutoff = Date.now() - 2 * 60 * 1000;
+        // A "live" worker has a RUNNING WORKER job whose heartbeat is fresh.
+        // We select all RUNNING/WORKER jobs and check the heartbeat in JS
+        // to avoid complex jsonb queries.
+        const runningWorkerJobs = await db.query.jobs.findMany({
+          where: and(eq(jobs.status, "RUNNING"), eq(jobs.dispatchMode, "WORKER")),
+          columns: { id: true, progress: true },
+        });
+        const liveCount = runningWorkerJobs.filter((j) => {
+          const hb =
+            (j.progress as Record<string, unknown> | null)?.workerHeartbeat;
+          return typeof hb === "number" && hb > heartbeatCutoff;
+        }).length;
+        return liveCount;
       })(),
     ]);
 
@@ -344,6 +369,24 @@ export default async function AdminSystemPage() {
         status={jobCounts.failed > 0 ? "warn" : "ok"}
         value={`${jobCounts.running} running`}
         sub={`${jobCounts.pending} pending · ${jobCounts.completed} done · ${jobCounts.failed} failed (24h)`}
+      />
+
+      <HealthCard
+        title="Dispatch Mode"
+        icon={<Cpu size={14} />}
+        status={
+          dispatchMode === "KUBERNETES" && !k8sEnabled ? "warn" : "ok"
+        }
+        value={dispatchMode}
+        sub={
+          dispatchMode === "INPROCESS"
+            ? "Jobs run in-process (single server)"
+            : dispatchMode === "WORKER"
+              ? `External worker · ${activeWorkerCount} active worker${activeWorkerCount === 1 ? "" : "s"}`
+              : k8sEnabled
+                ? "Kubernetes dispatch enabled"
+                : "Kubernetes dispatch (feature flag off)"
+        }
       />
     </div>
   );

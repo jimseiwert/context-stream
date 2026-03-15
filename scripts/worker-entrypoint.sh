@@ -52,4 +52,4 @@ export DATABASE_URL="$APP_URL"
 echo "✅ Starting worker process..."
 # Use stdbuf to force line-buffered output for Kubernetes logging
 # Run tsx directly (not through npm) to ensure it's PID 1 for proper Kubernetes log capture
-exec stdbuf -oL -eL npx tsx src/lib/jobs/worker.ts
+exec stdbuf -oL -eL npx tsx src/lib/jobs/worker-entry.ts

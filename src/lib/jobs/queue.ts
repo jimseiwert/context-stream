@@ -1,25 +1,37 @@
 // In-Process Job Queue
-// Creates a DB job record and fires off background processing without blocking the request
+// Creates a DB job record and dispatches processing via the central dispatcher.
 
 import { db } from "@/lib/db";
 import { jobs } from "@/lib/db/schema";
 import type { JobType } from "@/lib/db/schema";
-import { processDocumentPipeline } from "./processors/document-pipeline-processor";
+import { dispatchJob, type DispatchMode } from "./dispatcher";
 
 /**
- * Creates a job record in the database and starts processing in the background.
- * Returns the job ID immediately (fire and forget).
+ * Creates a job record in the database and dispatches processing via the
+ * configured dispatch mode (INPROCESS / WORKER / KUBERNETES).
+ * Returns the job ID immediately (fire and forget for INPROCESS mode).
  *
  * @param sourceId - The source to process
  * @param workspaceId - Optional workspace context
  * @param type - Job type (default: SCRAPE)
+ * @param dispatchMode - Optional override for dispatch mode
  * @returns The created job ID
  */
 export async function enqueueJob(
   sourceId: string,
   workspaceId?: string,
-  type: JobType = "SCRAPE"
+  type: JobType = "SCRAPE",
+  dispatchMode?: DispatchMode
 ): Promise<string> {
+  // Resolve effective dispatch mode before inserting so the row is accurate
+  const mode: DispatchMode =
+    dispatchMode ??
+    ((process.env.DISPATCH_MODE?.toUpperCase() === "WORKER"
+      ? "WORKER"
+      : process.env.DISPATCH_MODE?.toUpperCase() === "KUBERNETES"
+        ? "KUBERNETES"
+        : "INPROCESS") as DispatchMode);
+
   // Create job record
   const [job] = await db
     .insert(jobs)
@@ -28,18 +40,14 @@ export async function enqueueJob(
       workspaceId: workspaceId ?? null,
       type,
       status: "PENDING",
-      dispatchMode: "INPROCESS",
+      dispatchMode: mode,
     })
     .returning({ id: jobs.id });
 
   const jobId = job.id;
 
-  // Fire and forget — process asynchronously without blocking
-  setImmediate(() => {
-    processDocumentPipeline(jobId, sourceId).catch((err) => {
-      console.error(`[Queue] Unhandled error in pipeline for job ${jobId}:`, err);
-    });
-  });
+  // Route to the correct execution backend
+  await dispatchJob(jobId, sourceId, mode);
 
   return jobId;
 }

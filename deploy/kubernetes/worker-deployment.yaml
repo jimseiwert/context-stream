@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: contextstream-worker
+  namespace: default
+  labels:
+    app: contextstream-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: contextstream-worker
+  template:
+    metadata:
+      labels:
+        app: contextstream-worker
+    spec:
+      containers:
+        - name: worker
+          image: jimseiwert/context-stream:worker-latest
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          envFrom:
+            - secretRef:
+                name: contextstream-secrets
+            - configMapRef:
+                name: contextstream-config
+          env:
+            # Override DISPATCH_MODE to WORKER for this deployment
+            - name: DISPATCH_MODE
+              value: "worker"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pgrep -f "worker-entry.ts" > /dev/null || exit 1
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+      terminationGracePeriodSeconds: 60

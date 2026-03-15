@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: contextstream-app
+  namespace: default
+  labels:
+    app: contextstream-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: contextstream-app
+  template:
+    metadata:
+      labels:
+        app: contextstream-app
+    spec:
+      containers:
+        - name: app
+          image: jimseiwert/context-stream:app-latest
+          ports:
+            - containerPort: 3000
+              name: http
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          envFrom:
+            - secretRef:
+                name: contextstream-secrets
+            - configMapRef:
+                name: contextstream-config
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+      terminationGracePeriodSeconds: 30
