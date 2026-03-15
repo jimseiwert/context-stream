@@ -32,8 +32,8 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (data: ForgotPasswordFormData) => {
     setIsLoading(true);
     try {
-      // Use better-auth forgetPassword
-      const result = await authClient.forgetPassword({
+      // Use better-auth resetPassword (renamed from forgetPassword in 1.5.x)
+      const result = await authClient.requestPasswordReset({
         email: data.email,
         redirectTo: "/reset-password",
       });
