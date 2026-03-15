@@ -5,9 +5,18 @@ import { db } from "@/lib/db";
 import { embeddingProviderConfigs } from "@/lib/db/schema";
 import { requireAdmin } from "@/lib/auth/middleware";
 import { handleApiError, ValidationError } from "@/lib/utils/errors";
-import { eq } from "drizzle-orm";
+import { encryptApiKey } from "@/lib/utils/encryption";
 
 export const dynamic = "force-dynamic";
+
+const VALID_PROVIDERS = [
+  "OPENAI",
+  "AZURE_OPENAI",
+  "VERTEX_AI",
+  "VERTEX_AI_RAG_ENGINE",
+] as const;
+
+type EmbeddingProviderValue = (typeof VALID_PROVIDERS)[number];
 
 export async function GET(_request: NextRequest) {
   try {
@@ -17,17 +26,17 @@ export async function GET(_request: NextRequest) {
       columns: {
         id: true,
         provider: true,
+        name: true,
         model: true,
         dimensions: true,
-        apiEndpoint: true,
-        deploymentName: true,
+        sharedCredentialId: true,
+        isRagEngine: true,
         useBatchForNew: true,
         useBatchForRescrape: true,
-        additionalConfig: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        // apiKey intentionally excluded from list response
+        // connectionConfig intentionally excluded (contains encrypted secrets)
       },
     });
 
@@ -43,22 +52,23 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as Record<string, unknown>;
 
-    const provider = typeof body.provider === "string" ? body.provider : "";
-    const model = typeof body.model === "string" ? body.model.trim() : "";
+    const provider =
+      typeof body.provider === "string" ? body.provider : "";
+    const name =
+      typeof body.name === "string" ? body.name.trim() : "";
+    const model =
+      typeof body.model === "string" ? body.model.trim() : "";
     const dimensions =
       typeof body.dimensions === "number" ? body.dimensions : 1536;
-    const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
-    const apiEndpoint =
-      typeof body.apiEndpoint === "string" ? body.apiEndpoint.trim() : null;
-    const deploymentName =
-      typeof body.deploymentName === "string"
-        ? body.deploymentName.trim()
+    const isRagEngine = body.isRagEngine === true;
+    const sharedCredentialId =
+      typeof body.sharedCredentialId === "string"
+        ? body.sharedCredentialId
         : null;
 
-    const validProviders = ["OPENAI", "AZURE_OPENAI", "VERTEX_AI"];
-    if (!validProviders.includes(provider)) {
+    if (!VALID_PROVIDERS.includes(provider as EmbeddingProviderValue)) {
       throw new ValidationError(
-        "provider must be one of: OPENAI, AZURE_OPENAI, VERTEX_AI"
+        `provider must be one of: ${VALID_PROVIDERS.join(", ")}`
       );
     }
 
@@ -66,25 +76,37 @@ export async function POST(request: NextRequest) {
       throw new ValidationError("model is required");
     }
 
-    if (!apiKey) {
-      throw new ValidationError("apiKey is required");
+    // connectionConfig — the caller passes a plain JSON object; we encrypt it.
+    const rawConnectionConfig =
+      body.connectionConfig &&
+      typeof body.connectionConfig === "object" &&
+      !Array.isArray(body.connectionConfig)
+        ? (body.connectionConfig as Record<string, unknown>)
+        : null;
+
+    if (!rawConnectionConfig) {
+      throw new ValidationError("connectionConfig is required");
     }
+
+    const connectionConfig = encryptApiKey(
+      JSON.stringify(rawConnectionConfig)
+    );
 
     const [config] = await db
       .insert(embeddingProviderConfigs)
       .values({
-        provider: provider as "OPENAI" | "AZURE_OPENAI" | "VERTEX_AI",
+        provider: provider as EmbeddingProviderValue,
+        name,
         model,
         dimensions,
-        apiKey,
-        apiEndpoint: apiEndpoint || null,
-        deploymentName: deploymentName || null,
+        connectionConfig,
+        sharedCredentialId: sharedCredentialId || null,
+        isRagEngine,
         isActive: false,
       })
       .returning();
 
-    // Return config without apiKey
-    const { apiKey: _key, ...safeConfig } = config;
+    const { connectionConfig: _cfg, ...safeConfig } = config;
 
     return NextResponse.json({ config: safeConfig }, { status: 201 });
   } catch (error) {

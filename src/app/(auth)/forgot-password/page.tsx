@@ -32,14 +32,13 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (data: ForgotPasswordFormData) => {
     setIsLoading(true);
     try {
-      // Use better-auth resetPassword (renamed from forgetPassword in 1.5.x)
-      const result = await authClient.requestPasswordReset({
+      const { error } = await authClient.requestPasswordReset({
         email: data.email,
         redirectTo: "/reset-password",
       });
 
-      if (result.error) {
-        throw new Error(result.error.message || "Failed to send reset email");
+      if (error) {
+        throw new Error(error.message || "Failed to send reset email");
       }
 
       setEmailSent(true);

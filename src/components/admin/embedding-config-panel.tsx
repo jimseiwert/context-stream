@@ -7,10 +7,10 @@ import { CheckCircle2, XCircle, Plus } from "lucide-react";
 type EmbeddingConfig = {
   id: string;
   provider: string;
+  name: string;
   model: string;
   dimensions: number;
-  apiEndpoint: string | null;
-  deploymentName: string | null;
+  isRagEngine: boolean;
   isActive: boolean;
   createdAt: Date | string;
 };
@@ -37,8 +37,6 @@ export function EmbeddingConfigPanel({ configs: initialConfigs }: EmbeddingConfi
     model: "",
     dimensions: "1536",
     apiKey: "",
-    apiEndpoint: "",
-    deploymentName: "",
   });
 
   async function handleSetActive(id: string) {
@@ -88,11 +86,10 @@ export function EmbeddingConfigPanel({ configs: initialConfigs }: EmbeddingConfi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: form.provider,
+          name: "",
           model: form.model,
           dimensions: parseInt(form.dimensions, 10) || 1536,
-          apiKey: form.apiKey,
-          apiEndpoint: form.apiEndpoint || null,
-          deploymentName: form.deploymentName || null,
+          connectionConfig: { apiKey: form.apiKey },
         }),
       });
 
@@ -116,8 +113,6 @@ export function EmbeddingConfigPanel({ configs: initialConfigs }: EmbeddingConfi
         model: "",
         dimensions: "1536",
         apiKey: "",
-        apiEndpoint: "",
-        deploymentName: "",
       });
       router.refresh();
     });
@@ -190,10 +185,9 @@ export function EmbeddingConfigPanel({ configs: initialConfigs }: EmbeddingConfi
                       {cfg.dimensions}d
                     </span>
                   </div>
-                  {cfg.apiEndpoint && (
+                  {cfg.isRagEngine && (
                     <p style={{ fontSize: "0.68rem", color: "var(--app-text-muted)", marginTop: "0.15rem" }}>
-                      {cfg.apiEndpoint}
-                      {cfg.deploymentName ? ` / ${cfg.deploymentName}` : ""}
+                      RAG Engine
                     </p>
                   )}
                 </div>
@@ -336,31 +330,6 @@ export function EmbeddingConfigPanel({ configs: initialConfigs }: EmbeddingConfi
               />
             </div>
 
-            <div>
-              <label style={{ fontSize: "0.7rem", color: "var(--app-text-muted)", display: "block", marginBottom: "0.25rem" }}>
-                API Endpoint (optional)
-              </label>
-              <input
-                type="text"
-                value={form.apiEndpoint}
-                onChange={(e) => setForm({ ...form, apiEndpoint: e.target.value })}
-                placeholder="https://api.openai.com"
-                style={inputStyle}
-              />
-            </div>
-
-            <div>
-              <label style={{ fontSize: "0.7rem", color: "var(--app-text-muted)", display: "block", marginBottom: "0.25rem" }}>
-                Deployment Name (Azure)
-              </label>
-              <input
-                type="text"
-                value={form.deploymentName}
-                onChange={(e) => setForm({ ...form, deploymentName: e.target.value })}
-                placeholder="my-deployment"
-                style={inputStyle}
-              />
-            </div>
           </div>
 
           {formError && (

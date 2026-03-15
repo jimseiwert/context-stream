@@ -103,6 +103,14 @@ export const embeddingProviderEnum = pgEnum("EmbeddingProvider", [
   "OPENAI",
   "AZURE_OPENAI",
   "VERTEX_AI",
+  "VERTEX_AI_RAG_ENGINE",
+]);
+
+export const credentialTypeEnum = pgEnum("CredentialType", [
+  "API_KEY",
+  "SERVICE_ACCOUNT_JSON",
+  "CONNECTION_STRING",
+  "AZURE_CREDENTIALS",
 ]);
 
 export const imageProcessingMethodEnum = pgEnum("ImageProcessingMethod", [
@@ -125,6 +133,7 @@ export type PlanTier = (typeof planTierEnum.enumValues)[number];
 export type SubscriptionStatus = (typeof subscriptionStatusEnum.enumValues)[number];
 export type UsageEventType = (typeof usageEventTypeEnum.enumValues)[number];
 export type EmbeddingProvider = (typeof embeddingProviderEnum.enumValues)[number];
+export type CredentialType = (typeof credentialTypeEnum.enumValues)[number];
 export type ImageProcessingMethod = (typeof imageProcessingMethodEnum.enumValues)[number];
 export type JobDispatchMode = (typeof jobDispatchModeEnum.enumValues)[number];
 

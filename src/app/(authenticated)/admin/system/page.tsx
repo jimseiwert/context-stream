@@ -308,23 +308,25 @@ export default async function AdminSystemPage() {
         columns: {
           id: true,
           provider: true,
+          name: true,
           model: true,
           dimensions: true,
-          apiEndpoint: true,
-          deploymentName: true,
+          sharedCredentialId: true,
+          isRagEngine: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
           useBatchForNew: true,
           useBatchForRescrape: true,
-          additionalConfig: true,
         },
       }),
       db.query.vectorStoreConfigs.findMany({
         columns: {
           id: true,
           provider: true,
-          additionalConfig: true,
+          name: true,
+          sharedCredentialId: true,
+          handlesEmbedding: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
@@ -344,11 +346,11 @@ export default async function AdminSystemPage() {
         const [completed] = await db
           .select({ count: count() })
           .from(jobs)
-          .where(sql`${jobs.status} = 'COMPLETED' AND ${jobs.createdAt} >= ${since24h}`);
+          .where(and(eq(jobs.status, "COMPLETED"), gte(jobs.createdAt, since24h)));
         const [failed] = await db
           .select({ count: count() })
           .from(jobs)
-          .where(sql`${jobs.status} = 'FAILED' AND ${jobs.createdAt} >= ${since24h}`);
+          .where(and(eq(jobs.status, "FAILED"), gte(jobs.createdAt, since24h)));
         return {
           pending: Number(pending?.count ?? 0),
           running: Number(running?.count ?? 0),

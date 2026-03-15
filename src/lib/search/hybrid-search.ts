@@ -166,7 +166,7 @@ export async function hybridSearch(
   }>(sql`
     SELECT
       id,
-      CAST(1 - (embedding <=> ${sql.raw(`'${embeddingLiteral}'::vector`)})) AS vector_score
+      (1 - (embedding <=> ${sql.raw(`'${embeddingLiteral}'::vector`)}))::float8 AS vector_score
     FROM chunks
     WHERE embedding IS NOT NULL
     ORDER BY embedding <=> ${sql.raw(`'${embeddingLiteral}'::vector`)}

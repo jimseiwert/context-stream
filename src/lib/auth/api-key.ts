@@ -1,9 +1,11 @@
 // API Key Authentication
 // For MCP and other programmatic access
 
-import { prisma } from '@/lib/db'
+import { db } from '@/lib/db'
+import { apiKeys } from '@/lib/db/schema'
 import { createHash, randomBytes } from 'crypto'
 import { UnauthorizedError } from '@/lib/utils/errors'
+import { eq, desc } from 'drizzle-orm'
 
 // Generate a new API key
 export function generateApiKey(): string {
@@ -29,9 +31,9 @@ export async function validateApiKey(key: string): Promise<string> {
   const hashedKey = hashApiKey(cleanKey)
 
   // Find API key in database
-  const apiKey = await prisma.apiKey.findUnique({
-    where: { key: hashedKey },
-    include: { user: true },
+  const apiKey = await db.query.apiKeys.findFirst({
+    where: eq(apiKeys.key, hashedKey),
+    with: { user: true },
   })
 
   if (!apiKey) {
@@ -44,11 +46,9 @@ export async function validateApiKey(key: string): Promise<string> {
   }
 
   // Update last used timestamp (async, don't await)
-  prisma.apiKey
-    .update({
-      where: { id: apiKey.id },
-      data: { lastUsedAt: new Date() },
-    })
+  db.update(apiKeys)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(apiKeys.id, apiKey.id))
     .catch((error: any) => {
       console.error('Failed to update API key last used:', error)
     })
@@ -82,14 +82,10 @@ export async function createApiKey(
   const hashedKey = hashApiKey(key)
 
   // Store in database
-  const apiKey = await prisma.apiKey.create({
-    data: {
-      name,
-      key: hashedKey,
-      userId,
-      expiresAt,
-    },
-  })
+  const [apiKey] = await db
+    .insert(apiKeys)
+    .values({ name, key: hashedKey, userId, expiresAt })
+    .returning()
 
   // Return ID and unhashed key (only time it's shown)
   return {
@@ -101,8 +97,8 @@ export async function createApiKey(
 // Revoke API key
 export async function revokeApiKey(keyId: string, userId: string): Promise<void> {
   // Verify ownership
-  const apiKey = await prisma.apiKey.findUnique({
-    where: { id: keyId },
+  const apiKey = await db.query.apiKeys.findFirst({
+    where: eq(apiKeys.id, keyId),
   })
 
   if (!apiKey || apiKey.userId !== userId) {
@@ -110,23 +106,20 @@ export async function revokeApiKey(keyId: string, userId: string): Promise<void>
   }
 
   // Delete key
-  await prisma.apiKey.delete({
-    where: { id: keyId },
-  })
+  await db.delete(apiKeys).where(eq(apiKeys.id, keyId))
 }
 
 // List user's API keys
 export async function listApiKeys(userId: string) {
-  return await prisma.apiKey.findMany({
-    where: { userId },
-    select: {
-      id: true,
-      name: true,
-      lastUsedAt: true,
-      expiresAt: true,
-      createdAt: true,
-      // Don't include the key itself
-    },
-    orderBy: { createdAt: 'desc' },
-  })
+  return await db
+    .select({
+      id: apiKeys.id,
+      name: apiKeys.name,
+      lastUsedAt: apiKeys.lastUsedAt,
+      expiresAt: apiKeys.expiresAt,
+      createdAt: apiKeys.createdAt,
+    })
+    .from(apiKeys)
+    .where(eq(apiKeys.userId, userId))
+    .orderBy(desc(apiKeys.createdAt))
 }

@@ -9,6 +9,16 @@ import { encryptApiKey } from "@/lib/utils/encryption";
 
 export const dynamic = "force-dynamic";
 
+const VALID_PROVIDERS = [
+  "PGVECTOR",
+  "PINECONE",
+  "QDRANT",
+  "WEAVIATE",
+  "VERTEX_AI_VECTOR_SEARCH",
+] as const;
+
+type VectorStoreProviderValue = (typeof VALID_PROVIDERS)[number];
+
 export async function GET(_request: NextRequest) {
   try {
     await requireAdmin();
@@ -17,11 +27,13 @@ export async function GET(_request: NextRequest) {
       columns: {
         id: true,
         provider: true,
-        additionalConfig: true,
+        name: true,
+        sharedCredentialId: true,
+        handlesEmbedding: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        // connectionEncrypted intentionally excluded from list
+        // connectionConfig intentionally excluded (contains encrypted secrets)
       },
     });
 
@@ -39,42 +51,63 @@ export async function POST(request: NextRequest) {
 
     const provider =
       typeof body.provider === "string" ? body.provider : "";
-    const connectionString =
-      typeof body.connectionString === "string"
-        ? body.connectionString.trim()
-        : "";
+    const name =
+      typeof body.name === "string" ? body.name.trim() : "";
+    const handlesEmbedding = body.handlesEmbedding === true;
+    const sharedCredentialId =
+      typeof body.sharedCredentialId === "string"
+        ? body.sharedCredentialId
+        : null;
 
-    const validProviders = ["PGVECTOR", "PINECONE", "QDRANT", "WEAVIATE"];
-    if (!validProviders.includes(provider)) {
+    if (!VALID_PROVIDERS.includes(provider as VectorStoreProviderValue)) {
       throw new ValidationError(
-        "provider must be one of: PGVECTOR, PINECONE, QDRANT, WEAVIATE"
+        `provider must be one of: ${VALID_PROVIDERS.join(", ")}`
       );
     }
 
-    if (!connectionString) {
-      throw new ValidationError("connectionString is required");
+    // Accept either connectionConfig (new) or connectionString (legacy simple form)
+    let connectionConfig: Record<string, unknown> | null = null;
+
+    if (
+      body.connectionConfig &&
+      typeof body.connectionConfig === "object" &&
+      !Array.isArray(body.connectionConfig)
+    ) {
+      connectionConfig = body.connectionConfig as Record<string, unknown>;
+    } else if (
+      typeof body.connectionString === "string" &&
+      body.connectionString.trim()
+    ) {
+      // Legacy simple form — wrap in connectionConfig
+      connectionConfig = { connectionString: body.connectionString.trim() };
     }
 
-    // Encrypt the connection string at rest
-    let connectionEncrypted: string;
-    try {
-      connectionEncrypted = encryptApiKey(connectionString);
-    } catch {
-      // If ENCRYPTION_KEY is not set, store as plain text with a prefix marker
-      connectionEncrypted = `plain:${connectionString}`;
+    if (!connectionConfig) {
+      throw new ValidationError(
+        "connectionConfig (or connectionString) is required"
+      );
     }
+
+    const connectionConfigEncrypted = encryptApiKey(
+      JSON.stringify(connectionConfig)
+    );
 
     const [config] = await db
       .insert(vectorStoreConfigs)
       .values({
-        provider: provider as "PGVECTOR" | "PINECONE" | "QDRANT" | "WEAVIATE",
-        connectionEncrypted,
+        provider: provider as VectorStoreProviderValue,
+        name,
+        connectionConfig: connectionConfigEncrypted,
+        sharedCredentialId: sharedCredentialId || null,
+        handlesEmbedding,
         isActive: false,
       })
       .returning({
         id: vectorStoreConfigs.id,
         provider: vectorStoreConfigs.provider,
-        additionalConfig: vectorStoreConfigs.additionalConfig,
+        name: vectorStoreConfigs.name,
+        sharedCredentialId: vectorStoreConfigs.sharedCredentialId,
+        handlesEmbedding: vectorStoreConfigs.handlesEmbedding,
         isActive: vectorStoreConfigs.isActive,
         createdAt: vectorStoreConfigs.createdAt,
         updatedAt: vectorStoreConfigs.updatedAt,

@@ -114,7 +114,7 @@ if (process.env.NODE_ENV !== "production") {
   globalThis.db = db;
 }
 
-// Backwards compatibility: Prisma-like API wrapper for gradual migration
+// Compatibility shim: named "prisma" so callers don't need to be updated all at once
 import { eq, and, or, count as drizzleCount } from "drizzle-orm";
 import { users, sources, workspaces, pages, apiKeys, sessions, subscriptions, jobs, auditLogs, queryLogs } from "./db/schema";
 

@@ -34,7 +34,6 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {};
 
     if ("isActive" in body && body.isActive === true) {
-      // Deactivate all other configs
       await db
         .update(vectorStoreConfigs)
         .set({ isActive: false })
@@ -44,17 +43,33 @@ export async function PATCH(
       updateData.isActive = body.isActive;
     }
 
+    if (typeof body.name === "string") updateData.name = body.name.trim();
+    if (typeof body.handlesEmbedding === "boolean")
+      updateData.handlesEmbedding = body.handlesEmbedding;
+    if ("sharedCredentialId" in body) {
+      updateData.sharedCredentialId =
+        typeof body.sharedCredentialId === "string"
+          ? body.sharedCredentialId
+          : null;
+    }
+
+    // Accept connectionConfig (new) or connectionString (legacy)
     if (
+      "connectionConfig" in body &&
+      body.connectionConfig &&
+      typeof body.connectionConfig === "object" &&
+      !Array.isArray(body.connectionConfig)
+    ) {
+      updateData.connectionConfig = encryptApiKey(
+        JSON.stringify(body.connectionConfig)
+      );
+    } else if (
       typeof body.connectionString === "string" &&
       body.connectionString.trim()
     ) {
-      try {
-        updateData.connectionEncrypted = encryptApiKey(
-          body.connectionString.trim()
-        );
-      } catch {
-        updateData.connectionEncrypted = `plain:${body.connectionString.trim()}`;
-      }
+      updateData.connectionConfig = encryptApiKey(
+        JSON.stringify({ connectionString: body.connectionString.trim() })
+      );
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -70,7 +85,9 @@ export async function PATCH(
       .returning({
         id: vectorStoreConfigs.id,
         provider: vectorStoreConfigs.provider,
-        additionalConfig: vectorStoreConfigs.additionalConfig,
+        name: vectorStoreConfigs.name,
+        sharedCredentialId: vectorStoreConfigs.sharedCredentialId,
+        handlesEmbedding: vectorStoreConfigs.handlesEmbedding,
         isActive: vectorStoreConfigs.isActive,
         createdAt: vectorStoreConfigs.createdAt,
         updatedAt: vectorStoreConfigs.updatedAt,
@@ -98,9 +115,7 @@ export async function DELETE(
       throw new NotFoundError("VectorStoreConfig");
     }
 
-    await db
-      .delete(vectorStoreConfigs)
-      .where(eq(vectorStoreConfigs.id, id));
+    await db.delete(vectorStoreConfigs).where(eq(vectorStoreConfigs.id, id));
 
     return NextResponse.json({ success: true });
   } catch (error) {

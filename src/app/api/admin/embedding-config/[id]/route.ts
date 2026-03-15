@@ -9,6 +9,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/lib/utils/errors";
+import { encryptApiKey } from "@/lib/utils/encryption";
 import { eq, ne } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -43,20 +44,29 @@ export async function PATCH(
       updateData.isActive = body.isActive;
     }
 
+    if (typeof body.name === "string") updateData.name = body.name.trim();
     if (typeof body.model === "string") updateData.model = body.model.trim();
-    if (typeof body.dimensions === "number") updateData.dimensions = body.dimensions;
-    if (typeof body.apiKey === "string" && body.apiKey.trim()) {
-      updateData.apiKey = body.apiKey.trim();
-    }
-    if ("apiEndpoint" in body) {
-      updateData.apiEndpoint =
-        typeof body.apiEndpoint === "string" ? body.apiEndpoint.trim() || null : null;
-    }
-    if ("deploymentName" in body) {
-      updateData.deploymentName =
-        typeof body.deploymentName === "string"
-          ? body.deploymentName.trim() || null
+    if (typeof body.dimensions === "number")
+      updateData.dimensions = body.dimensions;
+    if (typeof body.isRagEngine === "boolean")
+      updateData.isRagEngine = body.isRagEngine;
+    if ("sharedCredentialId" in body) {
+      updateData.sharedCredentialId =
+        typeof body.sharedCredentialId === "string"
+          ? body.sharedCredentialId
           : null;
+    }
+
+    // connectionConfig — only update if caller provides a new object
+    if (
+      "connectionConfig" in body &&
+      body.connectionConfig &&
+      typeof body.connectionConfig === "object" &&
+      !Array.isArray(body.connectionConfig)
+    ) {
+      updateData.connectionConfig = encryptApiKey(
+        JSON.stringify(body.connectionConfig)
+      );
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -71,7 +81,7 @@ export async function PATCH(
       .where(eq(embeddingProviderConfigs.id, id))
       .returning();
 
-    const { apiKey: _key, ...safeConfig } = updated;
+    const { connectionConfig: _cfg, ...safeConfig } = updated;
     return NextResponse.json({ config: safeConfig });
   } catch (error) {
     return handleApiError(error);

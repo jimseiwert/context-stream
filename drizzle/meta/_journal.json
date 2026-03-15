@@ -8,6 +8,20 @@
       "when": 1773496330933,
       "tag": "0000_dusty_silhouette",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1773602399658,
+      "tag": "0001_sweet_masked_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1742076000000,
+      "tag": "0002_embedding_vector_store_redesign",
+      "breakpoints": true
     }
   ]
 }

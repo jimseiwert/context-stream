@@ -1,11 +1,12 @@
 // better-auth Server Configuration
-// Configures authentication with Prisma adapter and providers
+// Configures authentication with Drizzle adapter and providers
 
-import { prisma } from "@/lib/db";
+import { db, prisma } from "@/lib/db";
+import { users, accounts, sessions, verifications } from "@/lib/db/schema";
 import { PLANS } from "@/lib/subscriptions/plans";
 import { PlanTier } from "@/lib/db";
 import { betterAuth } from "better-auth";
-import { prismaAdapter } from "better-auth/adapters/prisma";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { genericOAuth } from "better-auth/plugins";
 import { microsoft } from "better-auth/social-providers";
 import { hasLicenseFeature } from "@/lib/license";
@@ -127,14 +128,32 @@ const eePlugins =
     ? [genericOAuth({ config: eeGenericOAuthConfigs })]
     : [];
 
-// Use the shared Prisma client (which already has SSL configured)
 export const auth = betterAuth({
-  database: prismaAdapter(prisma, {
-    provider: "postgresql",
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema: { user: users, account: accounts, session: sessions, verification: verifications },
   }),
+  advanced: {
+    // Tell better-auth to generate UUIDs — required because our schema uses uuid columns
+    database: {
+      generateId: "uuid",
+    },
+  },
   secret: process.env.BETTER_AUTH_SECRET!,
   emailAndPassword: {
     enabled: true,
+    sendResetPassword: async ({ user, url }) => {
+      // If an email provider is configured via env vars, use it here.
+      // For now, log the reset URL so self-hosted users can still reset passwords
+      // via server logs until an email provider is wired up.
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[Auth] Password reset URL for ${user.email}: ${url}`);
+      } else {
+        // In production, log at a lower level so ops can extract it if needed
+        console.info(`[Auth] Password reset requested for ${user.email}`);
+        console.info(`[Auth] Reset URL: ${url}`);
+      }
+    },
   },
   socialProviders: {
     ...(githubClientId && githubClientSecret
