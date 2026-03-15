@@ -1,0 +1,104 @@
+replicaCount: 2
+
+image:
+  app:
+    repository: jimseiwert/context-stream
+    tag: app-latest
+    pullPolicy: IfNotPresent
+  worker:
+    repository: jimseiwert/context-stream
+    tag: worker-latest
+    pullPolicy: IfNotPresent
+  pdfParser:
+    repository: jimseiwert/context-stream
+    tag: pdf-parser-latest
+    pullPolicy: IfNotPresent
+
+worker:
+  enabled: true
+  replicaCount: 1
+
+pdfParser:
+  enabled: false
+  replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: contextstream.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  app:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  worker:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+  pdfParser:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Required secrets — set these via --set or a values override file.
+# NEVER commit real values here.
+secrets:
+  databaseUrl: ""
+  betterAuthSecret: ""
+  githubClientId: ""
+  githubClientSecret: ""
+  googleClientId: ""
+  googleClientSecret: ""
+  openaiApiKey: ""
+  stripeSecretKey: ""
+  stripeWebhookSecret: ""
+  licenseKey: ""
+
+config:
+  nextPublicAppUrl: ""
+  nextPublicSaasMode: "false"
+  dispatchMode: "INPROCESS"
+  nodeEnv: "production"
+
+serviceAccount:
+  create: true
+  name: ""
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}

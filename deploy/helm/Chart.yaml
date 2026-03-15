@@ -1,0 +1,17 @@
+apiVersion: v2
+name: contextstream
+description: ContextStream — AI-powered documentation search and MCP server
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - ai
+  - search
+  - mcp
+  - documentation
+  - rag
+home: https://github.com/jimseiwert/context-stream
+sources:
+  - https://github.com/jimseiwert/context-stream
+maintainers:
+  - name: jimseiwert
