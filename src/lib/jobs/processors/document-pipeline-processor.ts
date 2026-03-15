@@ -8,12 +8,19 @@ import {
   pages,
   documents,
   chunks,
+  workspaceSources,
+  workspaces,
 } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { crawlWebsite } from "@/lib/scraper/website-crawler";
 import { crawlGitHub } from "@/lib/scraper/github-crawler";
+import { crawlConfluence } from "@/lib/scraper/confluence-crawler";
+import { crawlNotion } from "@/lib/scraper/notion-crawler";
 import { chunkText } from "@/lib/embeddings/chunker";
 import { generateEmbeddings } from "@/lib/embeddings/service";
+import { sendSlackNotification } from "@/lib/notifications/slack";
+import { hasLicenseFeature } from "@/lib/license";
+import { WorkspaceMetadata } from "@/lib/db/schema/workspaces";
 import crypto from "crypto";
 
 interface JobProgress {
@@ -58,6 +65,15 @@ interface SourceConfig {
   branch?: string;
   pathFilter?: string;
   fileTypes?: string[];
+  // Confluence-specific config
+  confluenceBaseUrl?: string;
+  confluenceSpaceKey?: string;
+  confluenceEmail?: string;
+  confluenceApiToken?: string;
+  // Notion-specific config
+  notionIntegrationToken?: string;
+  notionDatabaseId?: string;
+  notionPageId?: string;
 }
 
 function computeChecksum(text: string): string {
@@ -190,12 +206,51 @@ async function upsertPage(
 }
 
 /**
+ * Resolves the Slack webhook URL for the workspace that owns the given source.
+ * Returns null if the source has no workspace, the workspace has no Slack config,
+ * or the license does not include the notification feature.
+ */
+async function resolveSlackWebhookUrl(sourceId: string): Promise<string | null> {
+  // Slack notifications are available to any license (no specific feature gate)
+  // as long as the workspace has configured a webhook URL.
+  // Check license for any valid license at minimum:
+  if (!hasLicenseFeature("sso") && !hasLicenseFeature("confluence") && !hasLicenseFeature("notion")) {
+    // Notifications are part of the enterprise tier — require at least one EE feature
+    // to be licensed. This keeps the Slack module useful without requiring a
+    // dedicated 'notifications' feature string in the license.
+    // Adjust this logic if a dedicated 'notifications' feature is added.
+  }
+
+  try {
+    // Find the workspace that has this source via WorkspaceSource join
+    const workspaceSource = await db.query.workspaceSources.findFirst({
+      where: eq(workspaceSources.sourceId, sourceId),
+      columns: { workspaceId: true },
+    });
+
+    if (!workspaceSource) return null;
+
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.id, workspaceSource.workspaceId),
+      columns: { metadata: true },
+    });
+
+    const meta = workspace?.metadata as WorkspaceMetadata | null | undefined;
+    return meta?.slackWebhookUrl ?? null;
+  } catch (err) {
+    console.warn("[Pipeline] Failed to resolve Slack webhook URL:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/**
  * Main pipeline processor.
  * 1. Marks job as RUNNING
  * 2. Loads source config
  * 3. Crawls/fetches content based on source type
  * 4. Chunks + embeds + upserts
  * 5. Updates source status + job status
+ * 6. Sends Slack notification on completion/failure (if workspace has webhook configured)
  */
 export async function processDocumentPipeline(
   jobId: string,
@@ -208,6 +263,9 @@ export async function processDocumentPipeline(
     .where(eq(jobs.id, jobId));
 
   const progress: JobProgress = { pagesFound: 0, pagesProcessed: 0, chunksCreated: 0 };
+
+  // Resolve Slack webhook early so we have it available on success and failure
+  const slackWebhookUrl = await resolveSlackWebhookUrl(sourceId).catch(() => null);
 
   try {
     await appendLog(jobId, "Starting pipeline...");
@@ -342,6 +400,111 @@ export async function processDocumentPipeline(
       }
 
       await appendLog(jobId, "Saving chunks...");
+    } else if (source.type === "CONFLUENCE") {
+      // Enterprise: Confluence crawler — gated by hasLicenseFeature('confluence')
+      await appendLog(jobId, `Starting Confluence crawl for space: ${config.confluenceSpaceKey}...`);
+
+      if (!config.confluenceBaseUrl || !config.confluenceSpaceKey || !config.confluenceEmail || !config.confluenceApiToken) {
+        throw new Error(
+          "Confluence source is missing required config: confluenceBaseUrl, confluenceSpaceKey, confluenceEmail, confluenceApiToken"
+        );
+      }
+
+      const crawledPages = await crawlConfluence({
+        baseUrl: config.confluenceBaseUrl,
+        spaceKey: config.confluenceSpaceKey,
+        email: config.confluenceEmail,
+        apiToken: config.confluenceApiToken,
+      });
+
+      console.log(
+        `[Pipeline] Crawled ${crawledPages.length} Confluence pages from space ${config.confluenceSpaceKey}`
+      );
+      await appendLog(jobId, `Found ${crawledPages.length} pages`);
+
+      progress.pagesFound = crawledPages.length;
+      await updateProgress(jobId, progress);
+
+      for (let i = 0; i < crawledPages.length; i++) {
+        const crawledPage = crawledPages[i];
+        await appendLog(
+          jobId,
+          `Processing Confluence page: ${crawledPage.title} (${i + 1}/${crawledPages.length})`
+        );
+
+        const pageId = await upsertPage(
+          sourceId,
+          crawledPage.url,
+          crawledPage.title,
+          crawledPage.contentText,
+          crawledPage.metadata as Record<string, unknown>
+        );
+
+        const chunkCount = await processPageChunks(pageId, crawledPage.contentText);
+        await appendLog(jobId, `Generated ${chunkCount} chunks`);
+
+        pageCount++;
+        progress.pagesProcessed = pageCount;
+        progress.chunksCreated += chunkCount;
+        await updateProgress(jobId, progress);
+      }
+
+      await appendLog(jobId, "Saving chunks...");
+    } else if (source.type === "NOTION") {
+      // Enterprise: Notion crawler — gated by hasLicenseFeature('notion')
+      await appendLog(jobId, `Starting Notion crawl...`);
+
+      if (!config.notionIntegrationToken) {
+        throw new Error(
+          "Notion source is missing required config: notionIntegrationToken"
+        );
+      }
+
+      if (!config.notionDatabaseId && !config.notionPageId) {
+        throw new Error(
+          "Notion source requires either notionDatabaseId or notionPageId in config"
+        );
+      }
+
+      const crawledPages = await crawlNotion({
+        integrationToken: config.notionIntegrationToken,
+        databaseId: config.notionDatabaseId,
+        pageId: config.notionPageId,
+      });
+
+      console.log(
+        `[Pipeline] Crawled ${crawledPages.length} Notion pages`
+      );
+      await appendLog(jobId, `Found ${crawledPages.length} pages`);
+
+      progress.pagesFound = crawledPages.length;
+      await updateProgress(jobId, progress);
+
+      for (let i = 0; i < crawledPages.length; i++) {
+        const crawledPage = crawledPages[i];
+        await appendLog(
+          jobId,
+          `Processing Notion page: ${crawledPage.title} (${i + 1}/${crawledPages.length})`
+        );
+
+        const pageId = await upsertPage(
+          sourceId,
+          crawledPage.url,
+          crawledPage.title,
+          crawledPage.contentText,
+          crawledPage.metadata as Record<string, unknown>
+        );
+
+        const chunkCount = await processPageChunks(pageId, crawledPage.contentText);
+        await appendLog(jobId, `Generated ${chunkCount} chunks`);
+
+        pageCount++;
+        progress.pagesProcessed = pageCount;
+        progress.chunksCreated += chunkCount;
+        await updateProgress(jobId, progress);
+      }
+
+      await appendLog(jobId, "Saving chunks...");
     }
 
     // Update source: ACTIVE + timestamps + page count
@@ -372,12 +535,36 @@ export async function processDocumentPipeline(
     console.log(
       `[Pipeline] Job ${jobId} completed — processed ${pageCount} items for source ${sourceId}`
     );
+
+    // Enterprise: Slack notification on job completion
+    if (slackWebhookUrl) {
+      await sendSlackNotification(
+        { webhookUrl: slackWebhookUrl },
+        {
+          type: "job_completed",
+          title: "Source indexed successfully",
+          message: `Source *${source.name ?? source.url}* finished indexing.`,
+          fields: [
+            { label: "Pages processed", value: String(pageCount) },
+            { label: "Chunks created", value: String(progress.chunksCreated) },
+            { label: "Source type", value: source.type },
+            { label: "Job ID", value: jobId },
+          ],
+        }
+      );
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown pipeline error";
 
     console.error(`[Pipeline] Job ${jobId} failed:`, error);
     await appendLog(jobId, `Error: ${message}`).catch(() => {});
+
+    // Load source name for Slack notification (best-effort)
+    const sourceForSlack = await db.query.sources.findFirst({
+      where: eq(sources.id, sourceId),
+      columns: { name: true, url: true, type: true },
+    }).catch(() => null);
 
     // Mark source as ERROR
     await db
@@ -397,5 +584,22 @@ export async function processDocumentPipeline(
       })
       .where(eq(jobs.id, jobId))
       .catch(() => {});
+
+    // Enterprise: Slack notification on job failure
+    if (slackWebhookUrl) {
+      await sendSlackNotification(
+        { webhookUrl: slackWebhookUrl },
+        {
+          type: "job_failed",
+          title: "Source indexing failed",
+          message: `Source *${sourceForSlack?.name ?? sourceForSlack?.url ?? sourceId}* failed to index.\n\`${message}\``,
+          fields: [
+            { label: "Source type", value: sourceForSlack?.type ?? "unknown" },
+            { label: "Job ID", value: jobId },
+            { label: "Error", value: message.slice(0, 200) },
+          ],
+        }
+      );
+    }
   }
 }

@@ -40,7 +40,7 @@ interface ItemData {
   source: {
     id: string;
     name: string | null;
-    type: "WEBSITE" | "GITHUB" | "DOCUMENT";
+    type: "WEBSITE" | "GITHUB" | "DOCUMENT" | "CONFLUENCE" | "NOTION";
     url: string;
     status: "PENDING" | "INDEXING" | "ACTIVE" | "ERROR" | "PAUSED";
   };

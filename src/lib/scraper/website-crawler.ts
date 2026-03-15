@@ -19,6 +19,8 @@ export interface CrawledPage {
     description?: string;
     depth: number;
     crawledAt: string;
+    /** Allow crawlers (Confluence, Notion, GitHub, etc.) to attach extra metadata */
+    [key: string]: unknown;
   };
 }
 

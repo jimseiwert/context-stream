@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Settings, Database, Flag } from "lucide-react";
+import { Activity, Settings, Database, Flag, ShieldCheck } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -9,24 +9,33 @@ interface Tab {
   icon: React.ReactNode;
 }
 
-const TABS: Tab[] = [
+const ALL_TABS: Tab[] = [
   { id: "health", label: "Health", icon: <Activity size={13} /> },
   { id: "embedding", label: "Embedding Config", icon: <Settings size={13} /> },
   { id: "vectorstore", label: "Vector Store", icon: <Database size={13} /> },
   { id: "flags", label: "Feature Flags", icon: <Flag size={13} /> },
+  { id: "enterprise", label: "Enterprise", icon: <ShieldCheck size={13} /> },
 ];
 
 interface SystemTabsProps {
   children: Record<string, React.ReactNode>;
   isSuperAdmin: boolean;
+  /** Whether to show the enterprise SSO/license tab (requires valid license) */
+  showEnterpriseTab?: boolean;
 }
 
-export function SystemTabs({ children, isSuperAdmin }: SystemTabsProps) {
+export function SystemTabs({
+  children,
+  isSuperAdmin,
+  showEnterpriseTab = false,
+}: SystemTabsProps) {
   const [activeTab, setActiveTab] = useState("health");
 
-  const visibleTabs = TABS.filter(
-    (t) => t.id !== "flags" || isSuperAdmin
-  );
+  const visibleTabs = ALL_TABS.filter((t) => {
+    if (t.id === "flags") return isSuperAdmin;
+    if (t.id === "enterprise") return isSuperAdmin && showEnterpriseTab;
+    return true;
+  });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>

@@ -1,5 +1,5 @@
 // Admin System Page — Server Component
-// Health, Embedding Config, Vector Store, Feature Flags
+// Health, Embedding Config, Vector Store, Feature Flags, Enterprise (License + SSO)
 
 import { db } from "@/lib/db";
 import {
@@ -21,11 +21,14 @@ import {
   Zap,
   Settings,
   Cpu,
+  ShieldCheck,
+  Key,
 } from "lucide-react";
 import { SystemTabs } from "@/components/admin/system-tabs";
 import { TestEmbeddingButton } from "@/components/admin/test-embedding-button";
 import { EmbeddingConfigPanel } from "@/components/admin/embedding-config-panel";
 import { VectorStorePanel } from "@/components/admin/vector-store-panel";
+import { validateLicense, isLicenseValid, hasLicenseFeature } from "@/lib/license";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -201,6 +204,86 @@ function FeatureFlag({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Enterprise UI helpers
+// ---------------------------------------------------------------------------
+
+function FeatureBadge({ label, active }: { label: string; active: boolean }) {
+  return (
+    <span
+      style={{
+        fontSize: "0.65rem",
+        fontWeight: 700,
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.05em",
+        borderRadius: "9999px",
+        padding: "0.2rem 0.6rem",
+        background: active ? "rgba(16,185,129,0.12)" : "rgba(107,114,128,0.10)",
+        color: active ? "var(--app-accent-green)" : "#9ca3af",
+        border: `1px solid ${active ? "rgba(16,185,129,0.25)" : "rgba(107,114,128,0.15)"}`,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+interface SsoEnvVarRowProps {
+  label: string;
+  envVar: string;
+  isSet: boolean;
+}
+
+function SsoEnvVarRow({ label, envVar, isSet }: SsoEnvVarRowProps) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0.5rem 0.75rem",
+        borderRadius: "0.375rem",
+        background: "rgba(255,255,255,0.025)",
+        gap: "0.75rem",
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <p style={{ fontSize: "0.78rem", fontWeight: 500, color: "var(--app-text-primary)" }}>
+          {label}
+        </p>
+        <p
+          style={{
+            fontSize: "0.68rem",
+            color: "var(--app-text-muted)",
+            fontFamily: "monospace",
+            marginTop: "0.1rem",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {envVar}
+        </p>
+      </div>
+      <span
+        style={{
+          flexShrink: 0,
+          fontSize: "0.65rem",
+          fontWeight: 700,
+          textTransform: "uppercase" as const,
+          letterSpacing: "0.06em",
+          borderRadius: "9999px",
+          padding: "0.15rem 0.5rem",
+          background: isSet ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.10)",
+          color: isSet ? "var(--app-accent-green)" : "#ef4444",
+        }}
+      >
+        {isSet ? "Set" : "Missing"}
+      </span>
+    </div>
+  );
+}
+
 export default async function AdminSystemPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
@@ -328,6 +411,29 @@ export default async function AdminSystemPage() {
     },
   ];
 
+  // ---------------------------------------------------------------------------
+  // Enterprise: License info
+  // ---------------------------------------------------------------------------
+  const license = validateLicense();
+  const licenseValid = isLicenseValid();
+  const ssoFeature = hasLicenseFeature("sso");
+
+  // SSO provider env var presence (display-only — set on the server)
+  const azureEnvVars = [
+    { label: "Tenant ID", envVar: "AZURE_TENANT_ID", isSet: Boolean(process.env.AZURE_TENANT_ID) },
+    { label: "Client ID", envVar: "AZURE_CLIENT_ID", isSet: Boolean(process.env.AZURE_CLIENT_ID) },
+    { label: "Client Secret", envVar: "AZURE_CLIENT_SECRET", isSet: Boolean(process.env.AZURE_CLIENT_SECRET) },
+  ];
+
+  const oidcEnvVars = [
+    { label: "Issuer URL", envVar: "OIDC_ISSUER", isSet: Boolean(process.env.OIDC_ISSUER) },
+    { label: "Client ID", envVar: "OIDC_CLIENT_ID", isSet: Boolean(process.env.OIDC_CLIENT_ID) },
+    { label: "Client Secret", envVar: "OIDC_CLIENT_SECRET", isSet: Boolean(process.env.OIDC_CLIENT_SECRET) },
+  ];
+
+  const azureConfigured = azureEnvVars.every((v) => v.isSet);
+  const oidcConfigured = oidcEnvVars.every((v) => v.isSet);
+
   // Tab content
   const healthTab = (
     <div
@@ -438,6 +544,255 @@ export default async function AdminSystemPage() {
     </div>
   );
 
+  // ---------------------------------------------------------------------------
+  // Enterprise tab — License status + SSO configuration
+  // ---------------------------------------------------------------------------
+  const enterpriseTab = (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+
+      {/* License Status Card */}
+      <div>
+        <p className="section-label" style={{ fontSize: "0.7rem", marginBottom: "0.75rem" }}>
+          License
+        </p>
+        <div
+          style={{
+            padding: "1rem 1.25rem",
+            borderRadius: "0.625rem",
+            border: `1px solid ${licenseValid ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`,
+            background: licenseValid ? "rgba(16,185,129,0.04)" : "rgba(239,68,68,0.04)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.875rem",
+          }}
+        >
+          {/* Status row */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            {licenseValid ? (
+              <CheckCircle2 size={16} style={{ color: "var(--app-accent-green)", flexShrink: 0 }} />
+            ) : (
+              <XCircle size={16} style={{ color: "#ef4444", flexShrink: 0 }} />
+            )}
+            <p
+              style={{
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                color: licenseValid ? "var(--app-accent-green)" : "#ef4444",
+              }}
+            >
+              {licenseValid
+                ? `Valid ${license?.plan === "enterprise" ? "Enterprise" : "Team"} License`
+                : process.env.LICENSE_KEY
+                  ? "License Expired or Invalid"
+                  : "No License Key Configured"}
+            </p>
+          </div>
+
+          {/* License details */}
+          {license && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                gap: "0.75rem",
+              }}
+            >
+              <div>
+                <p style={{ fontSize: "0.68rem", color: "var(--app-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Plan
+                </p>
+                <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--app-text-primary)", textTransform: "capitalize" }}>
+                  {license.plan}
+                </p>
+              </div>
+              <div>
+                <p style={{ fontSize: "0.68rem", color: "var(--app-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Seat Count
+                </p>
+                <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--app-text-primary)" }}>
+                  {license.seatCount}
+                </p>
+              </div>
+              <div>
+                <p style={{ fontSize: "0.68rem", color: "var(--app-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Expires
+                </p>
+                <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--app-text-primary)" }}>
+                  {license.expiresAt.toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Feature badges */}
+          {license && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
+              {["sso", "saml", "confluence", "notion"].map((feat) => (
+                <FeatureBadge
+                  key={feat}
+                  label={feat}
+                  active={license.features.includes(feat)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* No license guidance */}
+          {!licenseValid && (
+            <p style={{ fontSize: "0.75rem", color: "var(--app-text-muted)" }}>
+              Set the <code style={{ fontFamily: "monospace", fontSize: "0.72rem", background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: "0.25rem" }}>LICENSE_KEY</code> environment variable to enable enterprise features.
+              The value should be a base64-encoded JSON object with keys: <code style={{ fontFamily: "monospace", fontSize: "0.72rem" }}>expiresAt</code>, <code style={{ fontFamily: "monospace", fontSize: "0.72rem" }}>seatCount</code>, <code style={{ fontFamily: "monospace", fontSize: "0.72rem" }}>features</code>, <code style={{ fontFamily: "monospace", fontSize: "0.72rem" }}>plan</code>.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* SSO Configuration — only shown when license includes 'sso' */}
+      {ssoFeature ? (
+        <div>
+          <p className="section-label" style={{ fontSize: "0.7rem", marginBottom: "0.75rem" }}>
+            SSO Providers
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+
+            {/* Azure Entra ID */}
+            <div
+              style={{
+                padding: "1rem 1.25rem",
+                borderRadius: "0.625rem",
+                border: "1px solid var(--app-border, rgba(255,255,255,0.06))",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Key size={14} style={{ color: "var(--app-text-muted)" }} />
+                  <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--app-text-primary)" }}>
+                    Azure Entra ID (Microsoft)
+                  </p>
+                </div>
+                <FeatureBadge label={azureConfigured ? "Configured" : "Not configured"} active={azureConfigured} />
+              </div>
+
+              <p style={{ fontSize: "0.72rem", color: "var(--app-text-muted)" }}>
+                OIDC discovery: <code style={{ fontFamily: "monospace", fontSize: "0.7rem" }}>
+                  https://login.microsoftonline.com/&#123;tenantId&#125;/v2.0/.well-known/openid-configuration
+                </code>
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                {azureEnvVars.map((v) => (
+                  <SsoEnvVarRow key={v.envVar} label={v.label} envVar={v.envVar} isSet={v.isSet} />
+                ))}
+              </div>
+
+              {azureConfigured && (
+                <div>
+                  <a
+                    href="/api/auth/sign-in/social?provider=microsoft&callbackURL=/dashboard"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      color: "var(--app-accent-green)",
+                      textDecoration: "none",
+                      padding: "0.375rem 0.75rem",
+                      borderRadius: "0.375rem",
+                      border: "1px solid rgba(16,185,129,0.3)",
+                      background: "rgba(16,185,129,0.06)",
+                    }}
+                  >
+                    <ShieldCheck size={13} />
+                    Test Azure SSO Login
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Generic OIDC */}
+            <div
+              style={{
+                padding: "1rem 1.25rem",
+                borderRadius: "0.625rem",
+                border: "1px solid var(--app-border, rgba(255,255,255,0.06))",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Key size={14} style={{ color: "var(--app-text-muted)" }} />
+                  <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--app-text-primary)" }}>
+                    Generic OIDC (Okta, Auth0, Ping, etc.)
+                  </p>
+                </div>
+                <FeatureBadge label={oidcConfigured ? "Configured" : "Not configured"} active={oidcConfigured} />
+              </div>
+
+              <p style={{ fontSize: "0.72rem", color: "var(--app-text-muted)" }}>
+                OIDC discovery: <code style={{ fontFamily: "monospace", fontSize: "0.7rem" }}>
+                  $&#123;OIDC_ISSUER&#125;/.well-known/openid-configuration
+                </code>
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                {oidcEnvVars.map((v) => (
+                  <SsoEnvVarRow key={v.envVar} label={v.label} envVar={v.envVar} isSet={v.isSet} />
+                ))}
+              </div>
+
+              {oidcConfigured && (
+                <div>
+                  <a
+                    href="/api/auth/sign-in/oauth2?providerId=oidc&callbackURL=/dashboard"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      color: "var(--app-accent-green)",
+                      textDecoration: "none",
+                      padding: "0.375rem 0.75rem",
+                      borderRadius: "0.375rem",
+                      border: "1px solid rgba(16,185,129,0.3)",
+                      background: "rgba(16,185,129,0.06)",
+                    }}
+                  >
+                    <ShieldCheck size={13} />
+                    Test OIDC SSO Login
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div
+          style={{
+            padding: "1rem",
+            borderRadius: "0.5rem",
+            border: "1px solid var(--app-border, rgba(255,255,255,0.06))",
+            background: "rgba(107,114,128,0.04)",
+          }}
+        >
+          <p style={{ fontSize: "0.78rem", color: "var(--app-text-muted)" }}>
+            SSO configuration requires a license with the <FeatureBadge label="sso" active={false} /> feature.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -468,8 +823,8 @@ export default async function AdminSystemPage() {
             className="text-sm"
             style={{ color: "var(--app-text-secondary)" }}
           >
-            Health dashboard, embedding providers, vector stores, and feature
-            flags
+            Health dashboard, embedding providers, vector stores, feature
+            flags, and enterprise configuration
           </p>
         </div>
       </div>
@@ -478,11 +833,13 @@ export default async function AdminSystemPage() {
       <div className="app-card" style={{ padding: "1.25rem" }}>
         <SystemTabs
           isSuperAdmin={isSuperAdmin}
+          showEnterpriseTab={licenseValid}
           children={{
             health: healthTab,
             embedding: embeddingTab,
             vectorstore: vectorStoreTab,
             flags: flagsTab,
+            enterprise: enterpriseTab,
           }}
         />
       </div>

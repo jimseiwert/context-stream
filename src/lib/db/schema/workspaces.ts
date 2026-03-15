@@ -11,9 +11,20 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
 import { users } from "./auth";
 import { userRoleEnum } from "./enums";
 import { sources } from "./sources";
+
+/**
+ * Workspace metadata shape — stored as JSONB.
+ * Extended for enterprise features (Slack notifications, etc).
+ */
+export interface WorkspaceMetadata {
+  /** Slack incoming webhook URL for job notifications (EE feature) */
+  slackWebhookUrl?: string;
+  [key: string]: unknown;
+}
 
 // Workspace table
 export const workspaces = pgTable(
@@ -23,6 +34,8 @@ export const workspaces = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull().unique(),
     ownerId: uuid("ownerId").references(() => users.id),
+    /** JSONB metadata bag — see WorkspaceMetadata interface for known keys */
+    metadata: jsonb("metadata").$type<WorkspaceMetadata>(),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
   },

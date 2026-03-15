@@ -10,7 +10,7 @@ interface Source {
   id: string;
   url: string;
   name: string | null;
-  type: "WEBSITE" | "GITHUB" | "DOCUMENT";
+  type: "WEBSITE" | "GITHUB" | "DOCUMENT" | "CONFLUENCE" | "NOTION";
   status: "PENDING" | "INDEXING" | "ACTIVE" | "ERROR" | "PAUSED";
   pageCount: number;
   lastScrapedAt: Date | string | null;

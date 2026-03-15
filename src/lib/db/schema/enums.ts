@@ -15,6 +15,8 @@ export const sourceTypeEnum = pgEnum("SourceType", [
   "WEBSITE",
   "GITHUB",
   "DOCUMENT",
+  "CONFLUENCE",
+  "NOTION",
 ]);
 
 export const sourceStatusEnum = pgEnum("SourceStatus", [
