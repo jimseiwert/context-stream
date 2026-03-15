@@ -110,7 +110,7 @@ export default async function McpPage() {
 
   const userId = session.user.id;
 
-  const mcpUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://your-domain.com"}/mcp`;
+  const mcpUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://your-domain.com"}/api/mcp`;
 
   // Fetch user's API keys (exclude the raw key — it was only shown at creation time)
   const userApiKeys = await db

@@ -494,7 +494,7 @@ export async function GET(request: NextRequest) {
     start(controller) {
       // Send endpoint event per MCP Streamable HTTP spec
       const endpointEvent =
-        `event: endpoint\ndata: ${JSON.stringify({ uri: "/mcp" })}\n\n`;
+        `event: endpoint\ndata: ${JSON.stringify({ uri: "/api/mcp" })}\n\n`;
       controller.enqueue(encoder.encode(endpointEvent));
       // Keep connection open until client disconnects
       const keepAlive = setInterval(() => {
