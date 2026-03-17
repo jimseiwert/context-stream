@@ -38,17 +38,23 @@ spec:
         - name: wait-for-redis
           image: busybox:1.35
           command: ['sh', '-c', 'until nc -z {{ include "contextstream.redis.host" . }} {{ include "contextstream.redis.port" . }}; do echo waiting for redis; sleep 2; done']
+        {{- if eq .Values.migrations.strategy "init-container" }}
         - name: run-migrations
           image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:app-{{ .Values.image.tag | default .Chart.AppVersion }}"
-          command: ["npx", "prisma", "migrate", "deploy"]
+          command: ["node", "scripts/migrate.js"]
           env:
             - name: DATABASE_URL
               value: {{ include "contextstream.database.url" . }}
+            {{- if .Values.externalDatabase.directUrl }}
+            - name: DATABASE_URL_DIRECT
+              value: {{ .Values.externalDatabase.directUrl | quote }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "contextstream.fullname" . }}
             - secretRef:
                 name: {{ include "contextstream.fullname" . }}
+        {{- end }}
       containers:
         - name: app
           securityContext:

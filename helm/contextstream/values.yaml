@@ -131,6 +131,12 @@ env:
   # BETTER_AUTH_SECRET: ""
   # etc.
 
+# Migration strategy
+# "job"            - Helm pre-install/pre-upgrade Hook Job (recommended for external DB + multi-replica)
+# "init-container" - Init container on app pod (use when running built-in PostgreSQL subchart)
+migrations:
+  strategy: "job"
+
 # Secrets (use external secret management in production)
 secrets: {}
   # OPENAI_API_KEY: "your-secret-key"
@@ -144,6 +150,7 @@ externalDatabase:
   username: ""
   password: ""
   database: ""
+  directUrl: ""  # Optional: non-pooled URL for migrations (Neon, PgBouncer, Supabase)
 
 # External Redis (if not using built-in Redis)
 externalRedis:

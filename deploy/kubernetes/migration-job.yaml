@@ -1,0 +1,67 @@
+# ContextStream Database Migration Job
+#
+# Run this job once before deploying or upgrading the application:
+#
+#   kubectl apply -f deploy/kubernetes/migration-job.yaml
+#   kubectl wait --for=condition=complete job/contextstream-migrate --timeout=120s
+#   kubectl apply -f deploy/kubernetes/deployment.yaml
+#
+# IMPORTANT: Update the ConfigMap and Secret names below to match your deployment.
+# If you deployed with the plain YAML manifests (deploy/kubernetes/), the names are
+# "contextstream-config" and "contextstream-secrets" as shown. If you deployed with
+# Helm, the names default to your release name (e.g. "contextstream").
+#
+# Also update the wait-for-db host to match your PostgreSQL service name.
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: contextstream-migrate
+  labels:
+    app.kubernetes.io/name: contextstream
+    app.kubernetes.io/component: migrate
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: contextstream
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              # Update host/port to match your PostgreSQL service name
+              until nc -z contextstream-postgresql 5432; do
+                echo "waiting for database..."
+                sleep 2
+              done
+              echo "database is ready"
+      containers:
+        - name: migrate
+          image: jimseiwert/context-stream:app-latest
+          command: ["node", "scripts/migrate.js"]
+          envFrom:
+            - configMapRef:
+                name: contextstream-config   # Update to match your ConfigMap name
+            - secretRef:
+                name: contextstream-secrets  # Update to match your Secret name
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+                - ALL

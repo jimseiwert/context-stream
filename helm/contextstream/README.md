@@ -106,6 +106,55 @@ Install with custom values:
 helm install contextstream ./contextstream -f values.yaml
 ```
 
+## Database Migrations
+
+ContextStream runs database migrations automatically on every deploy. The strategy is controlled by `migrations.strategy` in `values.yaml`.
+
+### Strategy: `job` (default — recommended)
+
+A Kubernetes `Job` runs as a Helm pre-install/pre-upgrade hook **before** any app pods start. Helm blocks the rollout until the job succeeds. If the migration fails, the upgrade is aborted and your existing pods continue running.
+
+```bash
+helm upgrade contextstream ./contextstream
+# Helm runs migration Job → waits → rolls out app pods
+```
+
+**When to use:** Any deployment using an external database (Neon, AWS RDS, Cloud SQL, Supabase, etc.) or when running multiple app replicas.
+
+**Not suitable for:** First install with the built-in PostgreSQL subchart — the database doesn't exist yet when the hook job runs. Use `init-container` strategy for that case.
+
+### Strategy: `init-container`
+
+A migration init container runs inside each app pod before the main container starts. Use this when you're running the built-in PostgreSQL subchart (database is provisioned by Helm alongside the app).
+
+```yaml
+# values.yaml
+migrations:
+  strategy: "init-container"
+```
+
+**Drizzle uses advisory locks**, so concurrent init containers across replicas are safe — only one migration run will proceed at a time.
+
+### Switching strategies
+
+```bash
+# Use Hook Job (external DB, multi-replica)
+helm upgrade contextstream ./contextstream --set migrations.strategy=job
+
+# Use init container (built-in PostgreSQL subchart)
+helm upgrade contextstream ./contextstream --set migrations.strategy=init-container
+```
+
+### Manual migration (plain kubectl)
+
+If you're not using Helm, apply the migration job manually before each deployment:
+
+```bash
+kubectl apply -f deploy/kubernetes/migration-job.yaml
+kubectl wait --for=condition=complete job/contextstream-migrate --timeout=120s
+kubectl apply -f deploy/kubernetes/deployment.yaml
+```
+
 ## Uninstalling the Chart
 
 ```bash
@@ -256,7 +305,7 @@ kubectl logs -l app.kubernetes.io/component=worker -f
 ### Check database migrations
 
 ```bash
-kubectl logs -l app.kubernetes.io/component=app --tail=100 | grep prisma
+kubectl logs -l app.kubernetes.io/component=app --tail=100 | grep drizzle
 ```
 
 ## Support
