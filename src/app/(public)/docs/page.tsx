@@ -321,13 +321,10 @@ cd context-stream
 cp .env.example .env
 # Edit .env: set DATABASE_URL, BETTER_AUTH_SECRET, OPENAI_API_KEY
 
-# 3. Start with Docker Compose
+# 3. Start with Docker Compose (migrations run automatically on startup)
 docker compose -f docker/docker-compose.yml up -d
 
-# 4. Run database migrations
-docker compose -f docker/docker-compose.yml exec app npm run db:migrate
-
-# 5. Open http://localhost:3000
+# 4. Open http://localhost:3000
 # The first user to register automatically becomes SUPER_ADMIN`}</CodeBlock>
 
               <p
@@ -549,17 +546,15 @@ docker compose -f docker/docker-compose.yml exec app npm run db:migrate
                 subtitle="Use the bundled Helm chart for production Kubernetes deployments with ingress and auto-scaling."
               />
 
-              <CodeBlock filename="terminal — Helm install">{`# Install from the bundled chart
-helm install contextstream ./deploy/helm \\
-  --set secrets.databaseUrl="postgresql://user:pass@host:5432/db" \\
-  --set secrets.betterAuthSecret="$(openssl rand -base64 32)" \\
-  --set secrets.openaiApiKey="sk-..." \\
-  --set config.nextPublicAppUrl="https://docs.example.com" \\
+              <CodeBlock filename="terminal — Helm install">{`# Install from the bundled chart (migrations run automatically as a pre-install Job)
+helm install contextstream ./helm/contextstream \\
+  --set secrets.DATABASE_URL="postgresql://user:pass@host:5432/db" \\
+  --set secrets.BETTER_AUTH_SECRET="$(openssl rand -base64 32)" \\
+  --set secrets.OPENAI_API_KEY="sk-..." \\
+  --set env.NEXT_PUBLIC_APP_URL="https://contextstream.example.com" \\
   --set ingress.enabled=true \\
-  --set ingress.hosts[0].host="docs.example.com"
-
-# Run migrations after the deploy completes
-kubectl exec -it deploy/contextstream-app -- npm run db:migrate`}</CodeBlock>
+  --set ingress.hosts[0].host="contextstream.example.com" \\
+  --set migrations.strategy=job`}</CodeBlock>
 
               <div
                 style={{
@@ -1137,11 +1132,8 @@ npm run db:seed`}</CodeBlock>
                   <CodeBlock filename="terminal">{`# Pull latest images
 docker compose -f docker/docker-compose.yml pull
 
-# Restart containers
-docker compose -f docker/docker-compose.yml up -d
-
-# Run any new migrations
-docker compose -f docker/docker-compose.yml exec app npm run db:migrate`}</CodeBlock>
+# Restart containers (migrations run automatically on startup)
+docker compose -f docker/docker-compose.yml up -d`}</CodeBlock>
                 </div>
                 <div>
                   <div
@@ -1155,12 +1147,8 @@ docker compose -f docker/docker-compose.yml exec app npm run db:migrate`}</CodeB
                   >
                     Helm / Kubernetes
                   </div>
-                  <CodeBlock filename="terminal">{`# Upgrade the Helm release
-helm upgrade contextstream ./deploy/helm --reuse-values
-
-# Run any new migrations
-kubectl exec -it deploy/contextstream-app \\
-  -- npm run db:migrate`}</CodeBlock>
+                  <CodeBlock filename="terminal">{`# Upgrade the Helm release (migrations run automatically as a pre-upgrade Job)
+helm upgrade contextstream ./helm/contextstream --reuse-values`}</CodeBlock>
                 </div>
               </div>
 

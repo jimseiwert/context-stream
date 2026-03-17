@@ -38,7 +38,7 @@ echo "📦 Running database migrations..."
 echo "   Connection URL: $(echo "$MIGRATION_URL" | sed 's/:\/\/[^@]*@/:\/\/***@/')"
 
 # Run database migrations
-if DATABASE_URL="$MIGRATION_URL" npx drizzle-kit migrate; then
+if DATABASE_URL="$MIGRATION_URL" npx tsx scripts/migrate.ts; then
   echo "   ✓ Migrations applied successfully"
 else
   echo "   ✗ Migration failed"

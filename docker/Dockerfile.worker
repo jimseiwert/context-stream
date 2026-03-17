@@ -42,6 +42,7 @@ COPY package*.json ./
 COPY tsconfig.json ./
 COPY drizzle.config.ts ./
 COPY drizzle ./drizzle/
+COPY scripts/migrate.ts ./scripts/migrate.ts
 COPY scripts/worker-entrypoint.sh ./scripts/worker-entrypoint.sh
 
 # Make entrypoint script executable and set ownership to non-root user
