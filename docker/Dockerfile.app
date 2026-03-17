@@ -62,6 +62,15 @@ ENV REDIS_URL=redis://localhost:6379
 # Build the application
 RUN npm run build
 
+# Bundle migration script into a standalone CJS JS file (no node_modules needed at runtime)
+# --format=cjs: compatible without "type":"module" in package.json; esbuild injects __dirname
+RUN npx esbuild scripts/migrate.ts \
+    --bundle \
+    --platform=node \
+    --target=node20 \
+    --format=cjs \
+    --outfile=scripts/migrate.js
+
 # ========================================
 # Stage 3: Runner
 # ========================================
@@ -82,6 +91,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/drizzle ./drizzle/
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /app/scripts/migrate.js ./scripts/migrate.js
 COPY scripts/app-entrypoint.sh ./scripts/app-entrypoint.sh
 
 # Set ownership to non-root user

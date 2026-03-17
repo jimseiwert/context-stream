@@ -68,4 +68,4 @@ k8s/
 scripts/
 # Exception: Allow entrypoint scripts needed by Docker containers
 !scripts/*-entrypoint.sh
-!scripts/bundle-migrate.sh
+!scripts/migrate.ts
