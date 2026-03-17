@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./src:/app/src:ro
-      - ./prisma:/app/prisma:ro
+      - ./drizzle:/app/drizzle:ro
 
 volumes:
   redis_data:

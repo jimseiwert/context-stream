@@ -9,6 +9,9 @@ data:
   NODE_ENV: "production"
   DISPATCH_MODE: "INPROCESS"
   NEXT_PUBLIC_APP_URL: "https://your-domain.com"
+  BETTER_AUTH_URL: http://localhost:3000
+  AZURE_OPENAI_ENDPOINT: <base64-encoded-value>
+  AZURE_OPENAI_DEPLOYMENT: <base64-encoded-value>
   # Enable Kubernetes job dispatch for Mode 3
   # FEATURE_K8S_DISPATCH: "true"
   # Worker image override (used by Kubernetes dispatch)

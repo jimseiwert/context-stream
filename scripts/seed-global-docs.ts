@@ -5,9 +5,15 @@
  * Usage: npx tsx scripts/seed-global-docs.ts
  */
 
-import { PrismaClient, SourceType, SourceScope, SourceStatus, RescrapeSchedule } from '@prisma/client'
+import { drizzle } from 'drizzle-orm/postgres-js'
+import postgres from 'postgres'
+import { sources } from '../src/lib/db/schema'
+import { eq } from 'drizzle-orm'
+import * as dotenv from 'dotenv'
+dotenv.config()
 
-const prisma = new PrismaClient()
+const queryClient = postgres(process.env.DATABASE_URL!)
+const db = drizzle(queryClient)
 
 // Documentation sources organized by category
 const DOCUMENTATION_SOURCES = [
@@ -610,8 +616,8 @@ async function main() {
       const domain = new URL(doc.url).hostname
 
       // Check if source already exists
-      const existing = await prisma.source.findUnique({
-        where: { url: doc.url },
+      const existing = await db.query.sources.findFirst({
+        where: eq(sources.url, doc.url),
       })
 
       if (existing) {
@@ -621,23 +627,21 @@ async function main() {
       }
 
       // Create the source
-      await prisma.source.create({
-        data: {
-          url: doc.url,
-          domain,
-          name: doc.name,
-          type: SourceType.WEBSITE,
-          scope: SourceScope.GLOBAL,
-          status: SourceStatus.PENDING,
-          rescrapeSchedule: RescrapeSchedule.MONTHLY,
-          nextScrapeAt,
-          tags: doc.tags,
-          quality: 90, // High quality for official documentation
-          metadata: {
-            isOfficialDocs: true,
-            addedByScript: true,
-            addedAt: now.toISOString(),
-          },
+      await db.insert(sources).values({
+        url: doc.url,
+        domain,
+        name: doc.name,
+        type: 'WEBSITE',
+        scope: 'GLOBAL',
+        status: 'PENDING',
+        rescrapeSchedule: 'MONTHLY',
+        nextScrapeAt,
+        tags: doc.tags,
+        quality: 90, // High quality for official documentation
+        metadata: {
+          isOfficialDocs: true,
+          addedByScript: true,
+          addedAt: now.toISOString(),
         },
       })
 
@@ -671,5 +675,5 @@ main()
     process.exit(1)
   })
   .finally(async () => {
-    await prisma.$disconnect()
+    await queryClient.end()
   })

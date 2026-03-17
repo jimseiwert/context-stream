@@ -82,10 +82,17 @@ export default function LoginPage() {
     try {
       console.log("[LOGIN] Attempting GitHub OAuth login");
 
-      await authClient.signIn.social({
+      const { error } = await authClient.signIn.social({
         provider: "github",
         callbackURL: "/dashboard",
       });
+
+      if (error) {
+        console.error("[LOGIN] GitHub OAuth error:", error);
+        toast.error(error.message || "Failed to login with GitHub");
+        setIsGithubLoading(false);
+      }
+      // On success: browser redirects to GitHub, loading stays true intentionally
     } catch (error) {
       console.error("[LOGIN] GitHub OAuth exception:", error);
       toast.error("Failed to login with GitHub");

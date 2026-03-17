@@ -86,21 +86,7 @@ services:
 
   # External worker process (Mode 2 — WORKER dispatch)
   # Polls the Job table for PENDING jobs with dispatchMode=WORKER and processes them.
-  worker:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.worker
-    container_name: contextstream-worker
-    restart: unless-stopped
-    env_file: ../.env
-    environment:
-      - DISPATCH_MODE=worker
-      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-contextstream}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-contextstream}}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - contextstream-network
+
 
 volumes:
   postgres_data:

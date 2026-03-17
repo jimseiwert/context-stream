@@ -12,7 +12,24 @@
       "mcp__playwright__browser_console_messages",
       "Bash(npx tsc:*)",
       "mcp__playwright__browser_click",
-      "mcp__ref__ref_search_documentation"
+      "mcp__ref__ref_search_documentation",
+      "mcp__ref__ref_read_url",
+      "Bash(npm run:*)",
+      "Bash(grep:*)",
+      "Bash(node:*)",
+      "Bash(find:*)",
+      "Bash(yes:*)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npx esbuild:*)",
+      "Read(//tmp/**)",
+      "Bash(docker network:*)",
+      "Bash(docker run:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(yamllint helm/contextstream/templates/deployment-app.yaml)"
     ]
-  },
+  }
 }

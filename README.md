@@ -95,7 +95,7 @@ Enterprise-ready with auto-scaling and high availability.
 Built with modern, battle-tested technologies:
 
 - **Frontend**: Next.js 15, React 19, TailwindCSS, shadcn/ui
-- **Backend**: Next.js API Routes, Prisma ORM
+- **Backend**: Next.js API Routes, Drizzle ORM
 - **Database**: PostgreSQL 16 with pgvector
 - **Search**: Hybrid BM25 + Vector similarity
 - **Queue**: Bull (Redis-based)
@@ -213,7 +213,7 @@ Join our community and get help:
 ContextStream wouldn't be possible without these amazing open-source projects:
 
 - [Next.js](https://nextjs.org/) - The React framework
-- [Prisma](https://www.prisma.io/) - Next-generation ORM
+- [Drizzle ORM](https://orm.drizzle.team/) - Lightweight TypeScript ORM
 - [pgvector](https://github.com/pgvector/pgvector) - Vector similarity search for PostgreSQL
 - [Bull](https://github.com/OptimalBits/bull) - Premium queue package
 - [Better Auth](https://www.better-auth.com/) - Modern authentication
