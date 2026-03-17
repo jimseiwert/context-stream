@@ -77,7 +77,7 @@ export class VertexAIEmbeddingProvider implements EmbeddingProvider {
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const { GoogleAuth } = await import('google-auth-library') // eslint-disable-line import/no-extraneous-dependencies
+      const { GoogleAuth } = await import(/* webpackIgnore: true */ 'google-auth-library') // eslint-disable-line import/no-extraneous-dependencies
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
       const auth = new GoogleAuth({
         credentials: this.serviceAccountJson,
