@@ -37,7 +37,7 @@ function buildOpenAIClient(config: EmbeddingConfig): OpenAI {
   }
   return new OpenAI({
     apiKey,
-    ...(config.provider === 'AZURE_OPENAI' && cc.endpoint && cc.deploymentName
+    ...(config.provider === 'azure_openai' && cc.endpoint && cc.deploymentName
       ? {
           baseURL: `${cc.endpoint}/openai/deployments/${cc.deploymentName}`,
           defaultQuery: { 'api-version': '2024-06-01' },
@@ -83,7 +83,7 @@ export async function createBatchEmbeddingJob(sourceId: string): Promise<string>
   const config = await getActiveEmbeddingConfig();
 
   // Currently only OpenAI and Azure OpenAI support batch API
-  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+  if (config.provider !== 'openai' && config.provider !== 'azure_openai') {
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 
@@ -117,14 +117,15 @@ export async function createBatchEmbeddingJob(sourceId: string): Promise<string>
 
     // Create a batch request for each chunk
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const cc = config.connectionConfig as Record<string, unknown>
       requests.push({
         custom_id: `${page.id}:${chunkIndex}`,
         method: "POST",
         url: "/v1/embeddings",
         body: {
-          model: config.model,
+          model: cc.model as string,
           input: chunks[chunkIndex],
-          dimensions: config.dimensions,
+          dimensions: (cc.dimensions ?? 1536) as number,
         },
       });
     }
@@ -194,7 +195,7 @@ export async function checkBatchStatus(batchId: string) {
   const config = await getActiveEmbeddingConfig();
 
   // Currently only OpenAI and Azure OpenAI support batch API
-  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+  if (config.provider !== 'openai' && config.provider !== 'azure_openai') {
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 
@@ -220,7 +221,7 @@ export async function processBatchResults(batchId: string) {
   const config = await getActiveEmbeddingConfig();
 
   // Currently only OpenAI and Azure OpenAI support batch API
-  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+  if (config.provider !== 'openai' && config.provider !== 'azure_openai') {
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 
@@ -393,7 +394,7 @@ export async function cancelBatchJob(batchId: string) {
   const config = await getActiveEmbeddingConfig();
 
   // Currently only OpenAI and Azure OpenAI support batch API
-  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+  if (config.provider !== 'openai' && config.provider !== 'azure_openai') {
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 
@@ -419,7 +420,7 @@ export async function listBatchJobs(status?: string) {
   const config = await getActiveEmbeddingConfig();
 
   // Currently only OpenAI and Azure OpenAI support batch API
-  if (config.provider !== 'OPENAI' && config.provider !== 'AZURE_OPENAI') {
+  if (config.provider !== 'openai' && config.provider !== 'azure_openai') {
     throw new Error(`Batch API not supported for provider: ${config.provider}`);
   }
 

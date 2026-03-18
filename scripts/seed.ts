@@ -9,9 +9,9 @@ import {
   workspaceMembers,
   sources,
   workspaceSources,
-  embeddingProviderConfigs,
   vectorStoreConfigs,
 } from "../src/lib/db/schema";
+import { encryptApiKey } from "../src/lib/utils/encryption";
 
 async function seed() {
   console.log("🌱 Seeding database...");
@@ -106,29 +106,26 @@ async function seed() {
       .onConflictDoNothing();
   }
 
-  // 4. Create default embedding config (pgvector, no external API needed)
-  const [embeddingConfig] = await db
-    .insert(embeddingProviderConfigs)
-    .values({
-      provider: "OPENAI",
+  // 4. Create default vector store config (pgvector + OpenAI embeddings)
+  const storeConfig = encryptApiKey(
+    JSON.stringify({ connectionString: process.env.DATABASE_URL ?? "postgresql://localhost/contextstream" })
+  );
+  const embeddingConfig = encryptApiKey(
+    JSON.stringify({
+      apiKey: process.env.OPENAI_API_KEY ?? "sk-placeholder",
       model: "text-embedding-3-small",
       dimensions: 1536,
-      apiKey: process.env.OPENAI_API_KEY ?? "sk-placeholder",
-      isActive: true,
     })
-    .onConflictDoNothing()
-    .returning();
+  );
 
-  if (embeddingConfig) {
-    console.log("  ✓ Created default embedding config (OpenAI text-embedding-3-small)");
-  }
-
-  // 5. Create default vector store config (pgvector)
   const [vsConfig] = await db
     .insert(vectorStoreConfigs)
     .values({
-      provider: "PGVECTOR",
-      connectionEncrypted: "built-in",
+      name: "Default (pgvector + OpenAI)",
+      storeProvider: "pgvector",
+      storeConfig,
+      embeddingProvider: "openai",
+      embeddingConfig,
       isActive: true,
     })
     .onConflictDoNothing()

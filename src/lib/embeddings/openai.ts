@@ -12,14 +12,21 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
   private dimensions: number
 
   constructor(config: EmbeddingConfig) {
-    const apiKey = config.connectionConfig.apiKey as string | undefined
-    if (!apiKey) {
+    const cc = config.connectionConfig as {
+      apiKey?: string
+      model?: string
+      dimensions?: number
+    }
+    if (!cc.apiKey) {
       throw new Error('OpenAI requires an API key in connectionConfig.apiKey')
     }
+    if (!cc.model) {
+      throw new Error('OpenAI requires connectionConfig.model')
+    }
 
-    this.client = new OpenAI({ apiKey })
-    this.model = config.model
-    this.dimensions = config.dimensions
+    this.client = new OpenAI({ apiKey: cc.apiKey })
+    this.model = cc.model
+    this.dimensions = cc.dimensions ?? 1536
   }
 
   async generateEmbeddings(texts: string[]): Promise<number[][]> {

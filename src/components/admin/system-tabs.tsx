@@ -11,8 +11,7 @@ interface Tab {
 
 const ALL_TABS: Tab[] = [
   { id: "health", label: "Health", icon: <Activity size={13} /> },
-  { id: "embedding", label: "Embedding Config", icon: <Settings size={13} /> },
-  { id: "vectorstore", label: "Vector Store", icon: <Database size={13} /> },
+  { id: "vectorstore", label: "Vector Stores", icon: <Database size={13} /> },
   { id: "flags", label: "Feature Flags", icon: <Flag size={13} /> },
   { id: "enterprise", label: "Enterprise", icon: <ShieldCheck size={13} /> },
 ];

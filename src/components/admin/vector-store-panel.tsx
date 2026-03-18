@@ -6,7 +6,9 @@ import { CheckCircle2, XCircle, Plus } from "lucide-react";
 
 type VectorStoreConfig = {
   id: string;
-  provider: string;
+  name: string;
+  storeProvider: string;
+  embeddingProvider: string;
   isActive: boolean;
   createdAt: Date | string;
 };
@@ -16,30 +18,31 @@ interface VectorStorePanelProps {
 }
 
 const PROVIDER_COLORS: Record<string, string> = {
-  PGVECTOR: "#336791",
-  PINECONE: "#1b1f3b",
-  QDRANT: "#dc143c",
-  WEAVIATE: "#6bc3e4",
+  pgvector: "#336791",
+  pinecone: "#1b1f3b",
+  qdrant: "#dc143c",
+  weaviate: "#6bc3e4",
+  vertex_ai_vector_search: "#4285f4",
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
-  PGVECTOR: "pgvector",
-  PINECONE: "Pinecone",
-  QDRANT: "Qdrant",
-  WEAVIATE: "Weaviate",
+  pgvector: "pgvector",
+  pinecone: "Pinecone",
+  qdrant: "Qdrant",
+  weaviate: "Weaviate",
+  vertex_ai_vector_search: "Vertex AI Vector Search",
+};
+
+const EMBEDDING_LABELS: Record<string, string> = {
+  openai: "OpenAI",
+  azure_openai: "Azure OpenAI",
+  vertex_ai: "Vertex AI",
 };
 
 export function VectorStorePanel({ configs: initialConfigs }: VectorStorePanelProps) {
   const [configs, setConfigs] = useState(initialConfigs);
-  const [showForm, setShowForm] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [formError, setFormError] = useState<string | null>(null);
   const router = useRouter();
-
-  const [form, setForm] = useState({
-    provider: "PGVECTOR",
-    connectionString: "",
-  });
 
   async function handleSetActive(id: string) {
     startTransition(async () => {
@@ -78,51 +81,6 @@ export function VectorStorePanel({ configs: initialConfigs }: VectorStorePanelPr
     });
   }
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setFormError(null);
-
-    startTransition(async () => {
-      const res = await fetch("/api/admin/vector-store-config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: form.provider,
-          connectionString: form.connectionString,
-        }),
-      });
-
-      const data = (await res.json()) as {
-        config?: VectorStoreConfig;
-        error?: { message?: string };
-      };
-
-      if (!res.ok) {
-        setFormError(data.error?.message ?? "Failed to create config");
-        return;
-      }
-
-      if (data.config) {
-        setConfigs((prev) => [...prev, data.config!]);
-      }
-
-      setShowForm(false);
-      setForm({ provider: "PGVECTOR", connectionString: "" });
-      router.refresh();
-    });
-  }
-
-  const inputStyle: React.CSSProperties = {
-    background: "var(--app-bg-secondary, #1a1a2e)",
-    border: "1px solid var(--app-border, rgba(255,255,255,0.08))",
-    borderRadius: "0.375rem",
-    color: "var(--app-text-primary)",
-    fontSize: "0.8rem",
-    padding: "0.375rem 0.625rem",
-    outline: "none",
-    width: "100%",
-  };
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       {configs.length === 0 ? (
@@ -155,20 +113,32 @@ export function VectorStorePanel({ configs: initialConfigs }: VectorStorePanelPr
                 ) : (
                   <XCircle size={14} style={{ color: "var(--app-text-muted)", flexShrink: 0 }} />
                 )}
-                <span
-                  style={{
-                    fontSize: "0.65rem",
-                    fontWeight: 700,
-                    textTransform: "uppercase" as const,
-                    letterSpacing: "0.06em",
-                    color: PROVIDER_COLORS[cfg.provider] ?? "#666",
-                    background: `${PROVIDER_COLORS[cfg.provider] ?? "#666"}20`,
-                    borderRadius: "9999px",
-                    padding: "0.1rem 0.4rem",
-                  }}
-                >
-                  {PROVIDER_LABELS[cfg.provider] ?? cfg.provider}
-                </span>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span
+                      style={{
+                        fontSize: "0.65rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase" as const,
+                        letterSpacing: "0.06em",
+                        color: PROVIDER_COLORS[cfg.storeProvider] ?? "#888",
+                        background: `${PROVIDER_COLORS[cfg.storeProvider] ?? "#888"}20`,
+                        borderRadius: "9999px",
+                        padding: "0.1rem 0.4rem",
+                      }}
+                    >
+                      {PROVIDER_LABELS[cfg.storeProvider] ?? cfg.storeProvider}
+                    </span>
+                    {cfg.name && (
+                      <span style={{ fontSize: "0.78rem", fontWeight: 500, color: "var(--app-text-primary)" }}>
+                        {cfg.name}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: "0.68rem", color: "var(--app-text-muted)" }}>
+                    Embedding: {EMBEDDING_LABELS[cfg.embeddingProvider] ?? cfg.embeddingProvider}
+                  </span>
+                </div>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -210,116 +180,26 @@ export function VectorStorePanel({ configs: initialConfigs }: VectorStorePanelPr
         </div>
       )}
 
-      {!showForm ? (
-        <button
-          onClick={() => setShowForm(true)}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.375rem",
-            fontSize: "0.75rem",
-            fontWeight: 500,
-            padding: "0.375rem 0.75rem",
-            borderRadius: "0.375rem",
-            border: "1px solid var(--app-border, rgba(255,255,255,0.08))",
-            background: "transparent",
-            color: "var(--app-text-secondary)",
-            cursor: "pointer",
-            alignSelf: "flex-start",
-          }}
-        >
-          <Plus size={12} />
-          Add Vector Store
-        </button>
-      ) : (
-        <form
-          onSubmit={handleCreate}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.75rem",
-            padding: "1rem",
-            borderRadius: "0.5rem",
-            border: "1px solid var(--app-border, rgba(255,255,255,0.08))",
-            background: "rgba(0,0,0,0.15)",
-          }}
-        >
-          <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--app-text-primary)", margin: 0 }}>
-            Add Vector Store Config
-          </p>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "0.75rem" }}>
-            <div>
-              <label style={{ fontSize: "0.7rem", color: "var(--app-text-muted)", display: "block", marginBottom: "0.25rem" }}>
-                Provider
-              </label>
-              <select
-                value={form.provider}
-                onChange={(e) => setForm({ ...form, provider: e.target.value })}
-                style={inputStyle}
-                required
-              >
-                <option value="PGVECTOR">pgvector</option>
-                <option value="PINECONE">Pinecone</option>
-                <option value="QDRANT">Qdrant</option>
-                <option value="WEAVIATE">Weaviate</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={{ fontSize: "0.7rem", color: "var(--app-text-muted)", display: "block", marginBottom: "0.25rem" }}>
-                Connection String
-              </label>
-              <input
-                type="password"
-                value={form.connectionString}
-                onChange={(e) => setForm({ ...form, connectionString: e.target.value })}
-                placeholder="postgresql://..."
-                style={inputStyle}
-                required
-              />
-            </div>
-          </div>
-
-          {formError && (
-            <p style={{ fontSize: "0.72rem", color: "#ef4444" }}>{formError}</p>
-          )}
-
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button
-              type="submit"
-              disabled={isPending}
-              style={{
-                fontSize: "0.75rem",
-                fontWeight: 500,
-                padding: "0.375rem 0.75rem",
-                borderRadius: "0.375rem",
-                border: "none",
-                background: "var(--app-accent-green)",
-                color: "#000",
-                cursor: "pointer",
-              }}
-            >
-              {isPending ? "Saving..." : "Save"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              style={{
-                fontSize: "0.75rem",
-                padding: "0.375rem 0.75rem",
-                borderRadius: "0.375rem",
-                border: "1px solid var(--app-border, rgba(255,255,255,0.08))",
-                background: "transparent",
-                color: "var(--app-text-muted)",
-                cursor: "pointer",
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
+      <button
+        onClick={() => router.push("/admin/system-settings")}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.375rem",
+          fontSize: "0.75rem",
+          fontWeight: 500,
+          padding: "0.375rem 0.75rem",
+          borderRadius: "0.375rem",
+          border: "1px solid var(--app-border, rgba(255,255,255,0.08))",
+          background: "transparent",
+          color: "var(--app-text-secondary)",
+          cursor: "pointer",
+          alignSelf: "flex-start",
+        }}
+      >
+        <Plus size={12} />
+        Add Vector Store
+      </button>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 
 import { relations } from "drizzle-orm";
 import {
+  foreignKey,
   index,
   pgTable,
   text,
@@ -12,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sources } from "./sources";
 import { workspaces } from "./workspaces";
+import { vectorStoreConfigs, ragEngineConfigs } from "./config";
 
 // Collection table
 export const collections = pgTable(
@@ -23,11 +25,29 @@ export const collections = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
+    /** Optional reference to the vector store config used for this collection */
+    vectorStoreConfigId: uuid("vectorStoreConfigId"),
+    /** Optional reference to a full-pipeline RAG engine config for this collection */
+    ragEngineConfigId: uuid("ragEngineConfigId"),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     workspaceIdIdx: index("collections_workspaceId_idx").on(table.workspaceId),
+    vectorStoreConfigIdIdx: index("collections_vectorStoreConfigId_idx").on(
+      table.vectorStoreConfigId
+    ),
+    ragEngineConfigIdIdx: index("collections_ragEngineConfigId_idx").on(
+      table.ragEngineConfigId
+    ),
+    vectorStoreConfigFk: foreignKey({
+      columns: [table.vectorStoreConfigId],
+      foreignColumns: [vectorStoreConfigs.id],
+    }).onDelete("set null"),
+    ragEngineConfigFk: foreignKey({
+      columns: [table.ragEngineConfigId],
+      foreignColumns: [ragEngineConfigs.id],
+    }).onDelete("set null"),
   })
 );
 
@@ -59,6 +79,14 @@ export const collectionsRelations = relations(collections, ({ one, many }) => ({
   workspace: one(workspaces, {
     fields: [collections.workspaceId],
     references: [workspaces.id],
+  }),
+  vectorStoreConfig: one(vectorStoreConfigs, {
+    fields: [collections.vectorStoreConfigId],
+    references: [vectorStoreConfigs.id],
+  }),
+  ragEngineConfig: one(ragEngineConfigs, {
+    fields: [collections.ragEngineConfigId],
+    references: [ragEngineConfigs.id],
   }),
   collectionSources: many(collectionSources),
 }));

@@ -1,5 +1,5 @@
 // Drizzle Schema - System Configuration
-// EmbeddingProviderConfig, VectorStoreConfig, SharedCredentials, ImageProcessingConfig
+// VectorStoreConfig (with embedded embedding config), RagEngineConfig, SharedCredentials, ImageProcessingConfig
 
 import {
   boolean,
@@ -12,24 +12,14 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { pgEnum } from "drizzle-orm/pg-core";
 import {
-  embeddingProviderEnum,
   imageProcessingMethodEnum,
   credentialTypeEnum,
 } from "./enums";
 
-export const vectorStoreProviderEnum = pgEnum("VectorStoreProvider", [
-  "PGVECTOR",
-  "PINECONE",
-  "QDRANT",
-  "WEAVIATE",
-  "VERTEX_AI_VECTOR_SEARCH",
-]);
-
 // ---------------------------------------------------------------------------
-// Shared Credentials — reusable credential vault referenced by embedding
-// and vector store configs to avoid duplicating secrets.
+// Shared Credentials — reusable credential vault referenced by vector store
+// and RAG engine configs to avoid duplicating secrets.
 //
 // credentialData stores an AES-256-GCM encrypted JSON string whose shape
 // depends on the credential type:
@@ -56,41 +46,44 @@ export const sharedCredentials = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Embedding Provider Config
+// Vector Store Config — owns its embedding configuration
 //
-// connectionConfig stores an AES-256-GCM encrypted JSON string whose shape
-// depends on the provider:
+// storeProvider and embeddingProvider are plain text (not enum) so adding new
+// providers requires no DB migration.
 //
-//   OPENAI              → { apiKey: string }
-//   AZURE_OPENAI        → { apiKey: string, endpoint: string, deploymentName: string }
-//   VERTEX_AI           → { projectId: string, location: string,
-//                           accessToken?: string,
-//                           serviceAccountJson?: object }
-//   VERTEX_AI_RAG_ENGINE→ { projectId: string, location: string,
-//                           ragCorpusName: string,
-//                           serviceAccountJson?: object }
+// storeConfig: AES-256-GCM encrypted JSON with provider-specific connection
+// fields, e.g.:
+//   pgvector                → { connectionString: string }
+//   pinecone                → { apiKey: string, indexName: string, environment?: string }
+//   qdrant                  → { url: string, collectionName: string, apiKey?: string }
+//   weaviate                → { url: string, className: string, apiKey?: string }
+//   vertex_ai_vector_search → { projectId, location, indexEndpointId, deployedIndexId }
 //
-// If sharedCredentialId is set it takes precedence over any inline credentials
-// in connectionConfig (the connection config still holds non-secret fields
-// such as projectId, endpoint, deploymentName).
+// embeddingConfig: AES-256-GCM encrypted JSON with embedding provider fields:
+//   openai       → { apiKey: string }
+//   azure_openai → { apiKey: string, endpoint: string, deploymentName: string }
+//   vertex_ai    → { projectId: string, location: string, accessToken?: string,
+//                    serviceAccountJson?: object }
 //
-// isRagEngine — when true the embedding pipeline is skipped; the provider
-// handles retrieval + embedding internally (e.g. Vertex AI RAG Engine).
+// If storeCredentialId / embeddingCredentialId is set it takes precedence over
+// any inline credentials in the respective config JSON.
 // ---------------------------------------------------------------------------
-export const embeddingProviderConfigs = pgTable(
-  "embedding_provider_configs",
+export const vectorStoreConfigs = pgTable(
+  "vector_store_configs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    provider: embeddingProviderEnum("provider").notNull(),
     name: text("name").notNull().default(""),
-    model: text("model").notNull(),
-    dimensions: integer("dimensions").notNull(),
-    /** AES-256-GCM encrypted JSON — provider-specific connection fields */
-    connectionConfig: text("connectionConfig").notNull(),
-    /** Optional reference to a shared credential (overrides inline credential) */
-    sharedCredentialId: uuid("sharedCredentialId"),
-    /** When true no separate embedding step is needed — the provider handles it */
-    isRagEngine: boolean("isRagEngine").default(false).notNull(),
+    // Store connection
+    storeProvider: text("storeProvider").notNull().default(""),
+    /** AES-256-GCM encrypted JSON — provider-specific store connection fields */
+    storeConfig: text("storeConfig").notNull().default(""),
+    storeCredentialId: uuid("storeCredentialId"),
+    // Embedding config (owned by this store)
+    embeddingProvider: text("embeddingProvider").notNull().default(""),
+    /** AES-256-GCM encrypted JSON — embedding provider fields */
+    embeddingConfig: text("embeddingConfig").notNull().default(""),
+    embeddingCredentialId: uuid("embeddingCredentialId"),
+    // Batch processing
     useBatchForNew: boolean("useBatchForNew").default(false).notNull(),
     useBatchForRescrape: boolean("useBatchForRescrape").default(true).notNull(),
     isActive: boolean("isActive").default(false).notNull(),
@@ -98,57 +91,48 @@ export const embeddingProviderConfigs = pgTable(
     updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
-    isActiveIdx: index("embedding_provider_configs_isActive_idx").on(
-      table.isActive
-    ),
-    providerIdx: index("embedding_provider_configs_provider_idx").on(
-      table.provider
-    ),
-    sharedCredentialFk: foreignKey({
-      columns: [table.sharedCredentialId],
+    isActiveIdx: index("vector_store_configs_isActive_idx").on(table.isActive),
+    storeProviderIdx: index("vector_store_configs_storeProvider_idx").on(table.storeProvider),
+    storeCredentialFk: foreignKey({
+      columns: [table.storeCredentialId],
+      foreignColumns: [sharedCredentials.id],
+    }).onDelete("set null"),
+    embeddingCredentialFk: foreignKey({
+      columns: [table.embeddingCredentialId],
       foreignColumns: [sharedCredentials.id],
     }).onDelete("set null"),
   })
 );
 
 // ---------------------------------------------------------------------------
-// Vector Store Config
+// RAG Engine Config — first-class table for full-pipeline RAG providers
 //
-// connectionConfig stores an AES-256-GCM encrypted JSON string whose shape
-// depends on the provider:
+// These providers handle retrieval + embedding internally (e.g. Vertex AI RAG
+// Engine), so no separate vector store or embedding step is needed.
 //
-//   PGVECTOR                → { connectionString: string }
-//   PINECONE                → { apiKey: string, indexName: string, environment?: string }
-//   QDRANT                  → { url: string, collectionName: string, apiKey?: string }
-//   WEAVIATE                → { url: string, className: string, apiKey?: string }
-//   VERTEX_AI_VECTOR_SEARCH → { projectId: string, location: string,
-//                               indexEndpointId: string, deployedIndexId: string,
-//                               serviceAccountJson?: object }
+// provider is plain text for extensibility, e.g. 'vertex_ai_rag_engine'.
 //
-// handlesEmbedding — when true the vector store generates its own embeddings
-// (e.g. Weaviate with a vectorizer module, Pinecone with inference). In that
-// case the separate embedding provider config is still consulted for dimension
-// metadata but generateEmbeddings() is not called.
+// connectionConfig: AES-256-GCM encrypted JSON, shape depends on provider:
+//   vertex_ai_rag_engine → { projectId, location, ragCorpusName,
+//                            serviceAccountJson?: object }
 // ---------------------------------------------------------------------------
-export const vectorStoreConfigs = pgTable(
-  "vector_store_configs",
+export const ragEngineConfigs = pgTable(
+  "rag_engine_configs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    provider: vectorStoreProviderEnum("provider").notNull(),
     name: text("name").notNull().default(""),
+    /** Plain-text provider identifier, e.g. 'vertex_ai_rag_engine' */
+    provider: text("provider").notNull(),
     /** AES-256-GCM encrypted JSON — provider-specific connection fields */
     connectionConfig: text("connectionConfig").notNull(),
-    /** Optional reference to a shared credential (overrides inline credential) */
     sharedCredentialId: uuid("sharedCredentialId"),
-    /** When true the vector store handles its own embeddings */
-    handlesEmbedding: boolean("handlesEmbedding").default(false).notNull(),
     isActive: boolean("isActive").default(false).notNull(),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
-    isActiveIdx: index("vector_store_configs_isActive_idx").on(table.isActive),
-    providerIdx: index("vector_store_configs_provider_idx").on(table.provider),
+    isActiveIdx: index("rag_engine_configs_isActive_idx").on(table.isActive),
+    providerIdx: index("rag_engine_configs_provider_idx").on(table.provider),
     sharedCredentialFk: foreignKey({
       columns: [table.sharedCredentialId],
       foreignColumns: [sharedCredentials.id],
@@ -156,7 +140,9 @@ export const vectorStoreConfigs = pgTable(
   })
 );
 
-// ImageProcessingConfig table
+// ---------------------------------------------------------------------------
+// Image Processing Config
+// ---------------------------------------------------------------------------
 export const imageProcessingConfigs = pgTable(
   "image_processing_configs",
   {
@@ -175,9 +161,7 @@ export const imageProcessingConfigs = pgTable(
     updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
-    isActiveIdx: index("image_processing_configs_isActive_idx").on(
-      table.isActive
-    ),
+    isActiveIdx: index("image_processing_configs_isActive_idx").on(table.isActive),
     methodIdx: index("image_processing_configs_method_idx").on(table.method),
   })
 );

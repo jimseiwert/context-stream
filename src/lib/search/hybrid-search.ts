@@ -14,6 +14,7 @@ import {
   collectionSources,
 } from "@/lib/db/schema";
 import { generateEmbeddings } from "@/lib/embeddings/service";
+import { getEmbeddingConfigById } from "@/lib/embeddings/config";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,6 +48,11 @@ export interface SearchOptions {
   /** Maximum number of results to return (default 20). */
   limit?: number;
   offset?: number;
+  /**
+   * If provided, use this vector store config's embedding settings for
+   * generating the query embedding instead of the globally active config.
+   */
+  vectorStoreConfigId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +95,156 @@ async function getCollectionSourceIds(collectionId: string): Promise<string[]> {
   return rows.map((r) => r.sourceId);
 }
 
+/**
+ * Fetches just the `vectorStoreConfigId` FK from a collection row.
+ * Returns undefined if the collection does not exist or has no assigned store.
+ */
+async function getCollectionVectorStoreId(
+  collectionId: string
+): Promise<string | undefined> {
+  const rows = await db
+    .select({ vectorStoreConfigId: collections.vectorStoreConfigId })
+    .from(collections)
+    .where(eq(collections.id, collectionId))
+    .limit(1);
+
+  return rows[0]?.vectorStoreConfigId ?? undefined;
+}
+
+/**
+ * Generates a single query embedding vector.
+ *
+ * When `vectorStoreConfigId` is supplied the embedding is generated using that
+ * store's own embedding provider and decrypted credentials (via
+ * `getEmbeddingConfigById`). This ensures the query vector lives in the same
+ * embedding space as the stored chunk vectors.
+ *
+ * Falls back to the globally active config (via `generateEmbeddings`) when no
+ * store ID is provided.
+ *
+ * Returns a zero vector on any failure so BM25 results still surface.
+ */
+async function generateQueryEmbedding(
+  query: string,
+  vectorStoreConfigId?: string
+): Promise<number[]> {
+  // --- Path 1: use the specific store's embedding config ---
+  if (vectorStoreConfigId) {
+    try {
+      const config = await getEmbeddingConfigById(vectorStoreConfigId);
+      if (!config) {
+        console.warn(
+          `[HybridSearch] Vector store config ${vectorStoreConfigId} not found — falling back to global config`
+        );
+        // fall through to Path 2
+      } else {
+        const cc = config.connectionConfig as Record<string, unknown>;
+        const dimensions =
+          typeof cc.dimensions === "number" ? cc.dimensions : 1536;
+
+        switch (config.provider) {
+          case "openai": {
+            const apiKey = cc.apiKey as string | undefined;
+            const model = cc.model as string | undefined;
+            if (!apiKey || !model) {
+              throw new Error(
+                "OpenAI embedding config missing apiKey or model"
+              );
+            }
+            const response = await fetch(
+              "https://api.openai.com/v1/embeddings",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                  model,
+                  input: [query],
+                  encoding_format: "float",
+                }),
+                signal: AbortSignal.timeout(60000),
+              }
+            );
+            if (!response.ok) {
+              const body = await response.text().catch(() => "");
+              throw new Error(
+                `OpenAI embeddings API error ${response.status}: ${body.slice(0, 300)}`
+              );
+            }
+            const data = (await response.json()) as {
+              data: Array<{ embedding: number[]; index: number }>;
+            };
+            return data.data[0].embedding;
+          }
+
+          case "azure_openai": {
+            const apiKey = cc.apiKey as string | undefined;
+            const endpoint = cc.endpoint as string | undefined;
+            const deploymentName = cc.deploymentName as string | undefined;
+            if (!apiKey || !endpoint || !deploymentName) {
+              throw new Error(
+                "Azure OpenAI embedding config missing apiKey, endpoint, or deploymentName"
+              );
+            }
+            const url = `${endpoint.replace(/\/$/, "")}/openai/deployments/${deploymentName}/embeddings?api-version=2024-02-01`;
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "api-key": apiKey,
+              },
+              body: JSON.stringify({ input: [query], encoding_format: "float" }),
+              signal: AbortSignal.timeout(60000),
+            });
+            if (!response.ok) {
+              const body = await response.text().catch(() => "");
+              throw new Error(
+                `Azure OpenAI embeddings API error ${response.status}: ${body.slice(0, 300)}`
+              );
+            }
+            const data = (await response.json()) as {
+              data: Array<{ embedding: number[]; index: number }>;
+            };
+            return data.data[0].embedding;
+          }
+
+          case "vertex_ai": {
+            const { VertexAIEmbeddingProvider } = await import(
+              "@/lib/embeddings/vertex"
+            );
+            const provider = new VertexAIEmbeddingProvider(config);
+            const embeddings = await provider.generateEmbeddings([query]);
+            return embeddings[0];
+          }
+
+          default:
+            console.warn(
+              `[HybridSearch] Unknown embedding provider "${config.provider}" for store ${vectorStoreConfigId} — falling back to global config`
+            );
+            // fall through to Path 2
+        }
+      }
+    } catch (err) {
+      console.error(
+        `[HybridSearch] Failed to generate embedding with store config ${vectorStoreConfigId}:`,
+        err
+      );
+      return new Array(1536).fill(0);
+    }
+  }
+
+  // --- Path 2: fall back to the globally active embedding config ---
+  try {
+    const embeddings = await generateEmbeddings([query]);
+    return embeddings[0];
+  } catch (err) {
+    console.error("[HybridSearch] Failed to generate query embedding:", err);
+    return new Array(1536).fill(0);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main search function
 // ---------------------------------------------------------------------------
@@ -117,6 +273,7 @@ export async function hybridSearch(
     vectorWeight = 0.7,
     limit = 20,
     offset = 0,
+    vectorStoreConfigId: explicitVsConfigId,
   } = options;
 
   if (!query || !query.trim()) {
@@ -142,16 +299,19 @@ export async function hybridSearch(
 
   // ---------------------------------------------------------------------------
   // Step 1: Generate query embedding
+  // Resolve the vector store config to use for embeddings:
+  //   - explicit vectorStoreConfigId on options takes highest precedence
+  //   - otherwise, derive it from the collection's assigned store
+  //   - if neither is available, generateQueryEmbedding falls back to the
+  //     globally active config
   // ---------------------------------------------------------------------------
-  let queryEmbedding: number[];
-  try {
-    const embeddings = await generateEmbeddings([query]);
-    queryEmbedding = embeddings[0];
-  } catch (err) {
-    console.error("[HybridSearch] Failed to generate query embedding:", err);
-    // Fall back to zeros — BM25 results will still surface
-    queryEmbedding = new Array(1536).fill(0);
-  }
+  const vsConfigId =
+    explicitVsConfigId ??
+    (collectionId
+      ? await getCollectionVectorStoreId(collectionId)
+      : undefined);
+
+  const queryEmbedding = await generateQueryEmbedding(query, vsConfigId);
 
   const embeddingLiteral = `[${queryEmbedding.join(",")}]`;
 

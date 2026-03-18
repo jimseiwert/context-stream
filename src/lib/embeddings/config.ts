@@ -1,33 +1,28 @@
 import { db } from '@/lib/db'
-import { embeddingProviderConfigs, sharedCredentials } from '@/lib/db/schema'
+import { vectorStoreConfigs, sharedCredentials } from '@/lib/db/schema'
 import { decryptApiKey } from '@/lib/utils/encryption'
-import type { EmbeddingProvider } from '@/lib/db/schema/enums'
 import { eq } from 'drizzle-orm'
 
 /**
- * Decrypted embedding provider configuration.
+ * Decrypted embedding configuration, sourced from the active vectorStoreConfig.
  *
  * connectionConfig holds provider-specific fields after decryption:
  *
- *   OPENAI              → { apiKey: string }
- *   AZURE_OPENAI        → { apiKey: string, endpoint: string, deploymentName: string }
- *   VERTEX_AI           → { projectId: string, location: string,
- *                           accessToken?: string, serviceAccountJson?: object }
- *   VERTEX_AI_RAG_ENGINE→ { projectId: string, location: string,
- *                           ragCorpusName: string, serviceAccountJson?: object }
+ *   openai       → { apiKey: string }
+ *   azure_openai → { apiKey: string, endpoint: string, deploymentName: string }
+ *   vertex_ai    → { projectId: string, location: string,
+ *                    accessToken?: string, serviceAccountJson?: object }
  *
- * When a sharedCredential is referenced its credentialData is decrypted and
- * merged into connectionConfig — so callers always read from one place.
+ * When an embeddingCredentialId is referenced its credentialData is decrypted
+ * and merged into connectionConfig — so callers always read from one place.
  */
 export interface EmbeddingConfig {
   id: string
-  provider: EmbeddingProvider
+  /** Plain-text provider identifier, e.g. 'openai', 'azure_openai', 'vertex_ai' */
+  provider: string
   name: string
-  model: string
-  dimensions: number
   connectionConfig: Record<string, unknown>
-  sharedCredentialId: string | null
-  isRagEngine: boolean
+  embeddingCredentialId: string | null
   useBatchForNew: boolean
   useBatchForRescrape: boolean
   isActive: boolean
@@ -64,9 +59,41 @@ async function mergeSharedCredential(
 
   const credData = decryptJson(cred.credentialData, `shared credential (${cred.name})`)
 
-  // Shared credential fields (key, json, connectionString, tenantId, etc.) take
-  // precedence over any inline values in connectionConfig.
+  // Shared credential fields take precedence over any inline values in connectionConfig.
   return { ...baseConfig, ...credData }
+}
+
+function rowToEmbeddingConfig(
+  row: typeof vectorStoreConfigs.$inferSelect
+): Omit<EmbeddingConfig, 'connectionConfig'> & { _encryptedConfig: string } {
+  return {
+    id: row.id,
+    provider: row.embeddingProvider,
+    name: row.name,
+    _encryptedConfig: row.embeddingConfig,
+    embeddingCredentialId: row.embeddingCredentialId ?? null,
+    useBatchForNew: row.useBatchForNew,
+    useBatchForRescrape: row.useBatchForRescrape,
+    isActive: row.isActive,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+async function buildEmbeddingConfig(
+  row: typeof vectorStoreConfigs.$inferSelect
+): Promise<EmbeddingConfig> {
+  const partial = rowToEmbeddingConfig(row)
+  let connectionConfig = decryptJson(
+    partial._encryptedConfig,
+    `embedding provider ${partial.provider} (vector store ${partial.id})`
+  )
+  connectionConfig = await mergeSharedCredential(
+    connectionConfig,
+    partial.embeddingCredentialId
+  )
+  const { _encryptedConfig: _, ...rest } = partial
+  return { ...rest, connectionConfig }
 }
 
 // ---------------------------------------------------------------------------
@@ -75,84 +102,63 @@ async function mergeSharedCredential(
 
 /**
  * Get the active embedding provider configuration (with decrypted credentials).
- * Throws if no active configuration is found.
+ * The embedding config is sourced from the active vectorStoreConfig.
+ * Throws if no active vector store configuration is found.
  */
 export async function getActiveEmbeddingConfig(): Promise<EmbeddingConfig> {
-  const config = await db.query.embeddingProviderConfigs.findFirst({
-    where: eq(embeddingProviderConfigs.isActive, true),
+  const config = await db.query.vectorStoreConfigs.findFirst({
+    where: eq(vectorStoreConfigs.isActive, true),
   })
 
   if (!config) {
     throw new Error(
-      'No active embedding provider configured. ' +
-        'Super admin must configure an embedding provider at /admin/system-settings'
+      'No active vector store configured. ' +
+        'Super admin must configure a vector store at /admin/system-settings'
     )
   }
 
-  let connectionConfig = decryptJson(config.connectionConfig, `provider ${config.provider}`)
-  connectionConfig = await mergeSharedCredential(connectionConfig, config.sharedCredentialId)
-
-  return {
-    id: config.id,
-    provider: config.provider,
-    name: config.name,
-    model: config.model,
-    dimensions: config.dimensions,
-    connectionConfig,
-    sharedCredentialId: config.sharedCredentialId,
-    isRagEngine: config.isRagEngine,
-    useBatchForNew: config.useBatchForNew,
-    useBatchForRescrape: config.useBatchForRescrape,
-    isActive: config.isActive,
-    createdAt: config.createdAt,
-    updatedAt: config.updatedAt,
-  }
+  return buildEmbeddingConfig(config)
 }
 
 /**
- * Get all embedding provider configurations.
- * connectionConfig is NOT decrypted (for listing purposes).
+ * Get all vector store configurations (embedding fields only, config NOT decrypted).
+ * For listing purposes — secrets are excluded.
  */
 export async function getAllEmbeddingConfigs() {
-  return db.query.embeddingProviderConfigs.findMany({
+  return db.query.vectorStoreConfigs.findMany({
+    columns: {
+      id: true,
+      name: true,
+      embeddingProvider: true,
+      embeddingCredentialId: true,
+      useBatchForNew: true,
+      useBatchForRescrape: true,
+      isActive: true,
+      createdAt: true,
+      updatedAt: true,
+    },
     orderBy: (t, { desc }) => [desc(t.isActive), desc(t.createdAt)],
   })
 }
 
 /**
- * Get a specific embedding provider configuration by ID (with decrypted credentials).
+ * Get a specific vector store configuration's embedding config by ID
+ * (with decrypted credentials).
  */
 export async function getEmbeddingConfigById(
   id: string
 ): Promise<EmbeddingConfig | null> {
-  const config = await db.query.embeddingProviderConfigs.findFirst({
-    where: eq(embeddingProviderConfigs.id, id),
+  const config = await db.query.vectorStoreConfigs.findFirst({
+    where: eq(vectorStoreConfigs.id, id),
   })
 
   if (!config) return null
 
-  let connectionConfig = decryptJson(config.connectionConfig, `provider ${config.provider}`)
-  connectionConfig = await mergeSharedCredential(connectionConfig, config.sharedCredentialId)
-
-  return {
-    id: config.id,
-    provider: config.provider,
-    name: config.name,
-    model: config.model,
-    dimensions: config.dimensions,
-    connectionConfig,
-    sharedCredentialId: config.sharedCredentialId,
-    isRagEngine: config.isRagEngine,
-    useBatchForNew: config.useBatchForNew,
-    useBatchForRescrape: config.useBatchForRescrape,
-    isActive: config.isActive,
-    createdAt: config.createdAt,
-    updatedAt: config.updatedAt,
-  }
+  return buildEmbeddingConfig(config)
 }
 
 /**
- * Validate encryption key is set on startup
+ * Validate encryption key is set on startup.
  */
 export function validateEncryptionKey(): void {
   if (!process.env.ENCRYPTION_KEY) {

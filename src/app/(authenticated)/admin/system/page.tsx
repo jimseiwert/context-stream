@@ -3,7 +3,6 @@
 
 import { db } from "@/lib/db";
 import {
-  embeddingProviderConfigs,
   vectorStoreConfigs,
   jobs,
   chunks,
@@ -26,7 +25,6 @@ import {
 } from "lucide-react";
 import { SystemTabs } from "@/components/admin/system-tabs";
 import { TestEmbeddingButton } from "@/components/admin/test-embedding-button";
-import { EmbeddingConfigPanel } from "@/components/admin/embedding-config-panel";
 import { VectorStorePanel } from "@/components/admin/vector-store-panel";
 import { validateLicense, isLicenseValid, hasLicenseFeature } from "@/lib/license";
 
@@ -300,33 +298,20 @@ export default async function AdminSystemPage() {
   const k8sEnabled = process.env.FEATURE_K8S_DISPATCH === "true";
 
   // Parallel data fetches
-  const [dbHealth, chunkCountResult, embeddingConfigs, vsConfigs, jobCounts, activeWorkerCount] =
+  const [dbHealth, chunkCountResult, vsConfigs, jobCounts, activeWorkerCount] =
     await Promise.all([
       getDatabaseHealth(),
       db.select({ count: count() }).from(chunks),
-      db.query.embeddingProviderConfigs.findMany({
-        columns: {
-          id: true,
-          provider: true,
-          name: true,
-          model: true,
-          dimensions: true,
-          sharedCredentialId: true,
-          isRagEngine: true,
-          isActive: true,
-          createdAt: true,
-          updatedAt: true,
-          useBatchForNew: true,
-          useBatchForRescrape: true,
-        },
-      }),
       db.query.vectorStoreConfigs.findMany({
         columns: {
           id: true,
-          provider: true,
           name: true,
-          sharedCredentialId: true,
-          handlesEmbedding: true,
+          storeProvider: true,
+          storeCredentialId: true,
+          embeddingProvider: true,
+          embeddingCredentialId: true,
+          useBatchForNew: true,
+          useBatchForRescrape: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
@@ -379,8 +364,14 @@ export default async function AdminSystemPage() {
 
   const chunkCount = Number(chunkCountResult[0]?.count ?? 0);
 
-  const activeEmbedding =
-    embeddingConfigs.find((c) => c.isActive) ?? null;
+  // Derive active embedding info from the active vector store config
+  const activeVectorStore = vsConfigs.find((c) => c.isActive) ?? null;
+  const activeEmbedding = activeVectorStore
+    ? {
+        provider: activeVectorStore.embeddingProvider,
+        name: activeVectorStore.name,
+      }
+    : null;
 
   // Feature flags
   const featureFlags = [
@@ -466,7 +457,7 @@ export default async function AdminSystemPage() {
         icon={<Zap size={14} />}
         status={activeEmbedding ? "ok" : "warn"}
         value={activeEmbedding ? activeEmbedding.provider : "None"}
-        sub={activeEmbedding ? `${activeEmbedding.model} · ${activeEmbedding.dimensions}d` : "No active config"}
+        sub={activeEmbedding ? `${activeEmbedding.name || activeEmbedding.provider}` : "No active config"}
       >
         <TestEmbeddingButton />
       </HealthCard>
@@ -496,15 +487,6 @@ export default async function AdminSystemPage() {
                 : "Kubernetes dispatch (feature flag off)"
         }
       />
-    </div>
-  );
-
-  const embeddingTab = (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      <p className="section-label" style={{ fontSize: "0.7rem" }}>
-        Embedding Provider Configs
-      </p>
-      <EmbeddingConfigPanel configs={embeddingConfigs} />
     </div>
   );
 
@@ -838,7 +820,6 @@ export default async function AdminSystemPage() {
           showEnterpriseTab={licenseValid}
           children={{
             health: healthTab,
-            embedding: embeddingTab,
             vectorstore: vectorStoreTab,
             flags: flagsTab,
             enterprise: enterpriseTab,

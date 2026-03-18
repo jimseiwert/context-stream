@@ -37,13 +37,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as Record<string, unknown>;
-    const { provider, model, dimensions, connectionConfig } = body;
+    const { provider, connectionConfig } = body;
 
-    if (!provider || !model || !dimensions || !connectionConfig) {
+    if (!provider || !connectionConfig) {
       return NextResponse.json(
         {
           error:
-            "Missing required fields: provider, model, dimensions, connectionConfig",
+            "Missing required fields: provider, connectionConfig",
         },
         { status: 400 }
       );
@@ -61,13 +61,10 @@ export async function POST(request: NextRequest) {
 
     const testConfig: EmbeddingConfig = {
       id: "test",
-      provider: provider as EmbeddingConfig["provider"],
+      provider: provider as string,
       name: "test",
-      model: model as string,
-      dimensions: Number(dimensions),
       connectionConfig: connectionConfig as Record<string, unknown>,
-      sharedCredentialId: null,
-      isRagEngine: false,
+      embeddingCredentialId: null,
       useBatchForNew: false,
       useBatchForRescrape: false,
       isActive: false,
@@ -79,19 +76,19 @@ export async function POST(request: NextRequest) {
 
     try {
       switch (provider) {
-        case "OPENAI":
+        case "openai":
           embeddingProvider = new OpenAIEmbeddingProvider(testConfig);
           break;
 
-        case "AZURE_OPENAI":
+        case "azure_openai":
           embeddingProvider = new AzureOpenAIEmbeddingProvider(testConfig);
           break;
 
-        case "VERTEX_AI":
+        case "vertex_ai":
           embeddingProvider = new VertexAIEmbeddingProvider(testConfig);
           break;
 
-        case "VERTEX_AI_RAG_ENGINE":
+        case "vertex_ai_rag_engine":
           return NextResponse.json(
             {
               error:
@@ -125,19 +122,12 @@ export async function POST(request: NextRequest) {
       }
 
       const embedding = embeddings[0];
-      if (!Array.isArray(embedding) || embedding.length !== Number(dimensions)) {
-        throw new Error(
-          `Expected embedding dimension ${dimensions}, got ${embedding.length}`
-        );
-      }
 
       return NextResponse.json({
         success: true,
         message: "Connection successful",
         test: {
           provider,
-          model,
-          dimensions,
           embeddingLength: embedding.length,
           latencyMs,
         },

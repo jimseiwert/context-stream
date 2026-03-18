@@ -9,16 +9,6 @@ import { encryptApiKey } from "@/lib/utils/encryption";
 
 export const dynamic = "force-dynamic";
 
-const VALID_PROVIDERS = [
-  "PGVECTOR",
-  "PINECONE",
-  "QDRANT",
-  "WEAVIATE",
-  "VERTEX_AI_VECTOR_SEARCH",
-] as const;
-
-type VectorStoreProviderValue = (typeof VALID_PROVIDERS)[number];
-
 export async function GET(_request: NextRequest) {
   try {
     await requireAdmin();
@@ -26,14 +16,17 @@ export async function GET(_request: NextRequest) {
     const configs = await db.query.vectorStoreConfigs.findMany({
       columns: {
         id: true,
-        provider: true,
         name: true,
-        sharedCredentialId: true,
-        handlesEmbedding: true,
+        storeProvider: true,
+        storeCredentialId: true,
+        embeddingProvider: true,
+        embeddingCredentialId: true,
+        useBatchForNew: true,
+        useBatchForRescrape: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        // connectionConfig intentionally excluded (contains encrypted secrets)
+        // storeConfig and embeddingConfig intentionally excluded (contain encrypted secrets)
       },
     });
 
@@ -49,65 +42,79 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as Record<string, unknown>;
 
-    const provider =
-      typeof body.provider === "string" ? body.provider : "";
     const name =
       typeof body.name === "string" ? body.name.trim() : "";
-    const handlesEmbedding = body.handlesEmbedding === true;
-    const sharedCredentialId =
-      typeof body.sharedCredentialId === "string"
-        ? body.sharedCredentialId
+    const storeProvider =
+      typeof body.storeProvider === "string" ? body.storeProvider.trim() : "";
+    const embeddingProvider =
+      typeof body.embeddingProvider === "string"
+        ? body.embeddingProvider.trim()
+        : "";
+    const useBatchForNew = body.useBatchForNew === true;
+    const useBatchForRescrape = body.useBatchForRescrape !== false; // default true
+    const storeCredentialId =
+      typeof body.storeCredentialId === "string"
+        ? body.storeCredentialId
+        : null;
+    const embeddingCredentialId =
+      typeof body.embeddingCredentialId === "string"
+        ? body.embeddingCredentialId
         : null;
 
-    if (!VALID_PROVIDERS.includes(provider as VectorStoreProviderValue)) {
-      throw new ValidationError(
-        `provider must be one of: ${VALID_PROVIDERS.join(", ")}`
-      );
+    if (!storeProvider) {
+      throw new ValidationError("storeProvider is required");
     }
 
-    // Accept either connectionConfig (new) or connectionString (legacy simple form)
-    let connectionConfig: Record<string, unknown> | null = null;
+    if (!embeddingProvider) {
+      throw new ValidationError("embeddingProvider is required");
+    }
 
     if (
-      body.connectionConfig &&
-      typeof body.connectionConfig === "object" &&
-      !Array.isArray(body.connectionConfig)
+      !body.storeConfig ||
+      typeof body.storeConfig !== "object" ||
+      Array.isArray(body.storeConfig)
     ) {
-      connectionConfig = body.connectionConfig as Record<string, unknown>;
-    } else if (
-      typeof body.connectionString === "string" &&
-      body.connectionString.trim()
-    ) {
-      // Legacy simple form — wrap in connectionConfig
-      connectionConfig = { connectionString: body.connectionString.trim() };
+      throw new ValidationError("storeConfig must be a non-null object");
     }
 
-    if (!connectionConfig) {
-      throw new ValidationError(
-        "connectionConfig (or connectionString) is required"
-      );
+    if (
+      !body.embeddingConfig ||
+      typeof body.embeddingConfig !== "object" ||
+      Array.isArray(body.embeddingConfig)
+    ) {
+      throw new ValidationError("embeddingConfig must be a non-null object");
     }
 
-    const connectionConfigEncrypted = encryptApiKey(
-      JSON.stringify(connectionConfig)
+    const storeConfigEncrypted = encryptApiKey(
+      JSON.stringify(body.storeConfig as Record<string, unknown>)
+    );
+    const embeddingConfigEncrypted = encryptApiKey(
+      JSON.stringify(body.embeddingConfig as Record<string, unknown>)
     );
 
     const [config] = await db
       .insert(vectorStoreConfigs)
       .values({
-        provider: provider as VectorStoreProviderValue,
         name,
-        connectionConfig: connectionConfigEncrypted,
-        sharedCredentialId: sharedCredentialId || null,
-        handlesEmbedding,
+        storeProvider,
+        storeConfig: storeConfigEncrypted,
+        storeCredentialId: storeCredentialId || null,
+        embeddingProvider,
+        embeddingConfig: embeddingConfigEncrypted,
+        embeddingCredentialId: embeddingCredentialId || null,
+        useBatchForNew,
+        useBatchForRescrape,
         isActive: false,
       })
       .returning({
         id: vectorStoreConfigs.id,
-        provider: vectorStoreConfigs.provider,
         name: vectorStoreConfigs.name,
-        sharedCredentialId: vectorStoreConfigs.sharedCredentialId,
-        handlesEmbedding: vectorStoreConfigs.handlesEmbedding,
+        storeProvider: vectorStoreConfigs.storeProvider,
+        storeCredentialId: vectorStoreConfigs.storeCredentialId,
+        embeddingProvider: vectorStoreConfigs.embeddingProvider,
+        embeddingCredentialId: vectorStoreConfigs.embeddingCredentialId,
+        useBatchForNew: vectorStoreConfigs.useBatchForNew,
+        useBatchForRescrape: vectorStoreConfigs.useBatchForRescrape,
         isActive: vectorStoreConfigs.isActive,
         createdAt: vectorStoreConfigs.createdAt,
         updatedAt: vectorStoreConfigs.updatedAt,

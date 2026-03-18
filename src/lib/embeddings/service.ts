@@ -35,19 +35,25 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
     return generateZeroEmbeddings(texts, 1536);
   }
 
-  if (config.isRagEngine) {
+  const cc = config.connectionConfig as Record<string, unknown>;
+
+  // model and dimensions are stored in connectionConfig for the new schema
+  const model = cc.model as string | undefined;
+  const dimensions = typeof cc.dimensions === "number" ? cc.dimensions : 1536;
+
+  // RAG engine providers handle embeddings internally
+  if (config.provider === "vertex_ai_rag_engine") {
     console.warn(
       "[Embeddings] Active provider is a RAG Engine — embeddings are handled internally. Returning zeros."
     );
-    return generateZeroEmbeddings(texts, config.dimensions);
+    return generateZeroEmbeddings(texts, dimensions);
   }
 
-  const cc = config.connectionConfig as Record<string, string | undefined>;
-
   switch (config.provider) {
-    case "OPENAI": {
-      const apiKey = cc.apiKey;
+    case "openai": {
+      const apiKey = cc.apiKey as string | undefined;
       if (!apiKey) throw new Error("OpenAI requires connectionConfig.apiKey");
+      if (!model) throw new Error("OpenAI requires connectionConfig.model");
 
       const url = "https://api.openai.com/v1/embeddings";
       const response = await fetch(url, {
@@ -57,7 +63,7 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: config.model,
+          model,
           input: texts,
           encoding_format: "float",
         }),
@@ -77,8 +83,10 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
         .map((item) => item.embedding);
     }
 
-    case "AZURE_OPENAI": {
-      const { apiKey, endpoint, deploymentName } = cc;
+    case "azure_openai": {
+      const apiKey = cc.apiKey as string | undefined;
+      const endpoint = cc.endpoint as string | undefined;
+      const deploymentName = cc.deploymentName as string | undefined;
       if (!apiKey || !endpoint || !deploymentName) {
         throw new Error(
           "Azure OpenAI requires connectionConfig.apiKey, endpoint, and deploymentName"
@@ -110,7 +118,7 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
         .map((item) => item.embedding);
     }
 
-    case "VERTEX_AI": {
+    case "vertex_ai": {
       // Delegate to VertexAIEmbeddingProvider which handles both accessToken and serviceAccountJson
       const { VertexAIEmbeddingProvider } = await import("./vertex");
       const provider = new VertexAIEmbeddingProvider(config);
@@ -121,7 +129,7 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
       console.warn(
         `[Embeddings] Unknown provider ${config.provider} — returning zero embeddings`
       );
-      return generateZeroEmbeddings(texts, config.dimensions);
+      return generateZeroEmbeddings(texts, dimensions);
   }
 }
 

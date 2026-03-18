@@ -14,36 +14,36 @@ export class VertexAIEmbeddingProvider implements EmbeddingProvider {
   private serviceAccountJson?: object
 
   constructor(config: EmbeddingConfig) {
-    const {
-      projectId,
-      location,
-      accessToken,
-      serviceAccountJson,
-    } = config.connectionConfig as {
+    const cc = config.connectionConfig as {
       projectId?: string
       location?: string
+      model?: string
+      dimensions?: number
       accessToken?: string
       serviceAccountJson?: object
     }
 
-    if (!projectId) {
+    if (!cc.projectId) {
       throw new Error('Vertex AI requires connectionConfig.projectId')
     }
-    if (!location) {
+    if (!cc.location) {
       throw new Error('Vertex AI requires connectionConfig.location')
     }
-    if (!accessToken && !serviceAccountJson) {
+    if (!cc.accessToken && !cc.serviceAccountJson) {
       throw new Error(
         'Vertex AI requires either connectionConfig.accessToken or connectionConfig.serviceAccountJson'
       )
     }
+    if (!cc.model) {
+      throw new Error('Vertex AI requires connectionConfig.model')
+    }
 
-    this.projectId = projectId
-    this.location = location
-    this.model = config.model
-    this.dimensions = config.dimensions
-    this.accessToken = accessToken
-    this.serviceAccountJson = serviceAccountJson
+    this.projectId = cc.projectId
+    this.location = cc.location
+    this.model = cc.model
+    this.dimensions = cc.dimensions ?? 768
+    this.accessToken = cc.accessToken
+    this.serviceAccountJson = cc.serviceAccountJson
   }
 
   private getEndpoint(): string {

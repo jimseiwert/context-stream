@@ -1,8 +1,8 @@
-// Admin Embedding Config — PATCH, DELETE /api/admin/embedding-config/[id]
+// Admin RAG Engine Config — PATCH, DELETE /api/admin/rag-engine-config/[id]
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { embeddingProviderConfigs } from "@/lib/db/schema";
+import { ragEngineConfigs } from "@/lib/db/schema";
 import { requireAdmin } from "@/lib/auth/middleware";
 import {
   handleApiError,
@@ -22,34 +22,35 @@ export async function PATCH(
     await requireAdmin();
     const { id } = await params;
 
-    const existing = await db.query.embeddingProviderConfigs.findFirst({
-      where: eq(embeddingProviderConfigs.id, id),
+    const existing = await db.query.ragEngineConfigs.findFirst({
+      where: eq(ragEngineConfigs.id, id),
     });
 
     if (!existing) {
-      throw new NotFoundError("EmbeddingProviderConfig");
+      throw new NotFoundError("RagEngineConfig");
     }
 
     const body = (await request.json()) as Record<string, unknown>;
     const updateData: Record<string, unknown> = {};
 
-    // "Set active" — deactivate all others first
     if ("isActive" in body && body.isActive === true) {
       await db
-        .update(embeddingProviderConfigs)
+        .update(ragEngineConfigs)
         .set({ isActive: false })
-        .where(ne(embeddingProviderConfigs.id, id));
+        .where(ne(ragEngineConfigs.id, id));
       updateData.isActive = true;
     } else if ("isActive" in body) {
       updateData.isActive = body.isActive;
     }
 
-    if (typeof body.name === "string") updateData.name = body.name.trim();
-    if (typeof body.model === "string") updateData.model = body.model.trim();
-    if (typeof body.dimensions === "number")
-      updateData.dimensions = body.dimensions;
-    if (typeof body.isRagEngine === "boolean")
-      updateData.isRagEngine = body.isRagEngine;
+    if (typeof body.name === "string") {
+      updateData.name = body.name.trim();
+    }
+
+    if (typeof body.provider === "string") {
+      updateData.provider = body.provider.trim();
+    }
+
     if ("sharedCredentialId" in body) {
       updateData.sharedCredentialId =
         typeof body.sharedCredentialId === "string"
@@ -57,7 +58,6 @@ export async function PATCH(
           : null;
     }
 
-    // connectionConfig — only update if caller provides a new object
     if (
       "connectionConfig" in body &&
       body.connectionConfig &&
@@ -65,7 +65,7 @@ export async function PATCH(
       !Array.isArray(body.connectionConfig)
     ) {
       updateData.connectionConfig = encryptApiKey(
-        JSON.stringify(body.connectionConfig)
+        JSON.stringify(body.connectionConfig as Record<string, unknown>)
       );
     }
 
@@ -76,13 +76,20 @@ export async function PATCH(
     updateData.updatedAt = new Date();
 
     const [updated] = await db
-      .update(embeddingProviderConfigs)
+      .update(ragEngineConfigs)
       .set(updateData)
-      .where(eq(embeddingProviderConfigs.id, id))
-      .returning();
+      .where(eq(ragEngineConfigs.id, id))
+      .returning({
+        id: ragEngineConfigs.id,
+        name: ragEngineConfigs.name,
+        provider: ragEngineConfigs.provider,
+        sharedCredentialId: ragEngineConfigs.sharedCredentialId,
+        isActive: ragEngineConfigs.isActive,
+        createdAt: ragEngineConfigs.createdAt,
+        updatedAt: ragEngineConfigs.updatedAt,
+      });
 
-    const { connectionConfig: _cfg, ...safeConfig } = updated;
-    return NextResponse.json({ config: safeConfig });
+    return NextResponse.json({ config: updated });
   } catch (error) {
     return handleApiError(error);
   }
@@ -96,17 +103,15 @@ export async function DELETE(
     await requireAdmin();
     const { id } = await params;
 
-    const existing = await db.query.embeddingProviderConfigs.findFirst({
-      where: eq(embeddingProviderConfigs.id, id),
+    const existing = await db.query.ragEngineConfigs.findFirst({
+      where: eq(ragEngineConfigs.id, id),
     });
 
     if (!existing) {
-      throw new NotFoundError("EmbeddingProviderConfig");
+      throw new NotFoundError("RagEngineConfig");
     }
 
-    await db
-      .delete(embeddingProviderConfigs)
-      .where(eq(embeddingProviderConfigs.id, id));
+    await db.delete(ragEngineConfigs).where(eq(ragEngineConfigs.id, id));
 
     return NextResponse.json({ success: true });
   } catch (error) {

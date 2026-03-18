@@ -43,32 +43,59 @@ export async function PATCH(
       updateData.isActive = body.isActive;
     }
 
-    if (typeof body.name === "string") updateData.name = body.name.trim();
-    if (typeof body.handlesEmbedding === "boolean")
-      updateData.handlesEmbedding = body.handlesEmbedding;
-    if ("sharedCredentialId" in body) {
-      updateData.sharedCredentialId =
-        typeof body.sharedCredentialId === "string"
-          ? body.sharedCredentialId
+    if (typeof body.name === "string") {
+      updateData.name = body.name.trim();
+    }
+
+    if (typeof body.storeProvider === "string") {
+      updateData.storeProvider = body.storeProvider.trim();
+    }
+
+    if (typeof body.embeddingProvider === "string") {
+      updateData.embeddingProvider = body.embeddingProvider.trim();
+    }
+
+    if (typeof body.useBatchForNew === "boolean") {
+      updateData.useBatchForNew = body.useBatchForNew;
+    }
+
+    if (typeof body.useBatchForRescrape === "boolean") {
+      updateData.useBatchForRescrape = body.useBatchForRescrape;
+    }
+
+    if ("storeCredentialId" in body) {
+      updateData.storeCredentialId =
+        typeof body.storeCredentialId === "string"
+          ? body.storeCredentialId
           : null;
     }
 
-    // Accept connectionConfig (new) or connectionString (legacy)
+    if ("embeddingCredentialId" in body) {
+      updateData.embeddingCredentialId =
+        typeof body.embeddingCredentialId === "string"
+          ? body.embeddingCredentialId
+          : null;
+    }
+
     if (
-      "connectionConfig" in body &&
-      body.connectionConfig &&
-      typeof body.connectionConfig === "object" &&
-      !Array.isArray(body.connectionConfig)
+      "storeConfig" in body &&
+      body.storeConfig &&
+      typeof body.storeConfig === "object" &&
+      !Array.isArray(body.storeConfig)
     ) {
-      updateData.connectionConfig = encryptApiKey(
-        JSON.stringify(body.connectionConfig)
+      updateData.storeConfig = encryptApiKey(
+        JSON.stringify(body.storeConfig as Record<string, unknown>)
       );
-    } else if (
-      typeof body.connectionString === "string" &&
-      body.connectionString.trim()
+    }
+
+    if (
+      "embeddingConfig" in body &&
+      body.embeddingConfig &&
+      typeof body.embeddingConfig === "object" &&
+      !Array.isArray(body.embeddingConfig)
     ) {
-      updateData.connectionConfig = encryptApiKey(
-        JSON.stringify({ connectionString: body.connectionString.trim() })
+      updateData.embeddingConfig = encryptApiKey(
+        JSON.stringify(body.embeddingConfig as Record<string, unknown>)
       );
     }
 
@@ -84,10 +111,13 @@ export async function PATCH(
       .where(eq(vectorStoreConfigs.id, id))
       .returning({
         id: vectorStoreConfigs.id,
-        provider: vectorStoreConfigs.provider,
         name: vectorStoreConfigs.name,
-        sharedCredentialId: vectorStoreConfigs.sharedCredentialId,
-        handlesEmbedding: vectorStoreConfigs.handlesEmbedding,
+        storeProvider: vectorStoreConfigs.storeProvider,
+        storeCredentialId: vectorStoreConfigs.storeCredentialId,
+        embeddingProvider: vectorStoreConfigs.embeddingProvider,
+        embeddingCredentialId: vectorStoreConfigs.embeddingCredentialId,
+        useBatchForNew: vectorStoreConfigs.useBatchForNew,
+        useBatchForRescrape: vectorStoreConfigs.useBatchForRescrape,
         isActive: vectorStoreConfigs.isActive,
         createdAt: vectorStoreConfigs.createdAt,
         updatedAt: vectorStoreConfigs.updatedAt,

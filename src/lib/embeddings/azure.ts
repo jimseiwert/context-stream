@@ -12,34 +12,37 @@ export class AzureOpenAIEmbeddingProvider implements EmbeddingProvider {
   private dimensions: number
 
   constructor(config: EmbeddingConfig) {
-    const { apiKey, endpoint, deploymentName } = config.connectionConfig as {
+    const cc = config.connectionConfig as {
       apiKey?: string
       endpoint?: string
       deploymentName?: string
+      model?: string
+      dimensions?: number
     }
 
-    if (!apiKey) {
+    if (!cc.apiKey) {
       throw new Error('Azure OpenAI requires connectionConfig.apiKey')
     }
-    if (!endpoint) {
+    if (!cc.endpoint) {
       throw new Error('Azure OpenAI requires connectionConfig.endpoint')
     }
-    if (!deploymentName) {
+    if (!cc.deploymentName) {
       throw new Error('Azure OpenAI requires connectionConfig.deploymentName')
     }
 
     // Format: https://{resourceName}.openai.azure.com/openai/deployments/{deploymentName}
-    const baseURL = `${endpoint}/openai/deployments/${deploymentName}`
+    const baseURL = `${cc.endpoint}/openai/deployments/${cc.deploymentName}`
 
     this.client = new OpenAI({
-      apiKey,
+      apiKey: cc.apiKey,
       baseURL,
       defaultQuery: { 'api-version': '2024-06-01' },
-      defaultHeaders: { 'api-key': apiKey },
+      defaultHeaders: { 'api-key': cc.apiKey },
     })
 
-    this.model = config.model
-    this.dimensions = config.dimensions
+    // model and dimensions are stored in connectionConfig in the new schema
+    this.model = cc.model ?? cc.deploymentName
+    this.dimensions = cc.dimensions ?? 1536
   }
 
   async generateEmbeddings(texts: string[]): Promise<number[][]> {

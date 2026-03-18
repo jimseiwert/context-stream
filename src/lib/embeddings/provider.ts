@@ -21,25 +21,25 @@ export interface ChunkWithEmbedding {
  * Get configured embedding provider.
  *
  * Throws if the active config is a RAG engine — callers should check
- * `config.isRagEngine` before calling this when generation is optional.
+ * Check `config.provider === 'vertex_ai_rag_engine'` before calling this when generation is optional.
  */
 export async function getEmbeddingProvider(): Promise<EmbeddingProvider> {
   const config = await getActiveEmbeddingConfig()
 
   switch (config.provider) {
-    case 'OPENAI':
+    case 'openai':
       return new OpenAIEmbeddingProvider(config)
 
-    case 'AZURE_OPENAI':
+    case 'azure_openai':
       return new AzureOpenAIEmbeddingProvider(config)
 
-    case 'VERTEX_AI':
+    case 'vertex_ai':
       return new VertexAIEmbeddingProvider(config)
 
-    case 'VERTEX_AI_RAG_ENGINE':
+    case 'vertex_ai_rag_engine':
       throw new Error(
         'Vertex AI RAG Engine handles embeddings internally. ' +
-          'Do not call getEmbeddingProvider() when isRagEngine is true.'
+          'Do not call getEmbeddingProvider() for a RAG engine config.'
       )
 
     default:
