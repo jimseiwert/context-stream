@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -28,38 +28,24 @@ interface ConfigOption {
   isActive: boolean;
 }
 
-const TYPE_LABELS: Record<SourceType, { label: string; placeholder: string; hint: string }> = {
-  WEBSITE: {
-    label: "Website URL",
-    placeholder: "https://docs.example.com",
-    hint: "We will crawl the site and index all reachable pages.",
-  },
-  GITHUB: {
-    label: "GitHub Repository URL",
-    placeholder: "https://github.com/owner/repo",
-    hint: "We will index .md, .ts, .js, and .py files from the repository.",
-  },
-  DOCUMENT: {
-    label: "Source URL (identifier)",
-    placeholder: "https://example.com/docs",
-    hint: "A DOCUMENT source holds uploaded files. You can upload files after creation.",
-  },
-};
-
 export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [type, setType] = useState<SourceType>("WEBSITE");
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+  const [singlePage, setSinglePage] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
   const [ragEngineConfigId, setRagEngineConfigId] = useState<string>("");
   const [vectorStoreConfigId, setVectorStoreConfigId] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   const [ragConfigs, setRagConfigs] = useState<ConfigOption[]>([]);
   const [vectorStoreConfigs, setVectorStoreConfigs] = useState<ConfigOption[]>([]);
 
-  // Fetch available configs when dialog opens
   useEffect(() => {
     if (!open) return;
     void Promise.all([
@@ -75,10 +61,14 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
     setType("WEBSITE");
     setUrl("");
     setName("");
+    setSinglePage(false);
+    setFile(null);
     setRagEngineConfigId("");
     setVectorStoreConfigId("");
     setError(null);
     setIsLoading(false);
+    setLoadingStep("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function handleOpenChange(value: boolean) {
@@ -90,39 +80,75 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
     e.preventDefault();
     setError(null);
 
-    const trimmedUrl = url.trim();
-    const trimmedName = name.trim();
-
-    if (!trimmedUrl) {
-      setError("URL is required");
-      return;
+    if (type !== "DOCUMENT") {
+      const trimmedUrl = url.trim();
+      if (!trimmedUrl) {
+        setError("URL is required");
+        return;
+      }
+      try {
+        new URL(trimmedUrl);
+      } catch {
+        setError("Please enter a valid URL (e.g. https://...)");
+        return;
+      }
     }
 
-    try {
-      new URL(trimmedUrl);
-    } catch {
-      setError("Please enter a valid URL (e.g. https://...)");
+    if (type === "DOCUMENT" && !file) {
+      setError("Please select a file to upload");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/sources", {
+      // Step 1: create the source
+      setLoadingStep(type === "DOCUMENT" ? "Creating source..." : "Adding source...");
+      const body: Record<string, unknown> = {
+        type,
+        name: name.trim() || undefined,
+        ragEngineConfigId: ragEngineConfigId || null,
+        vectorStoreConfigId: vectorStoreConfigId || null,
+      };
+
+      if (type !== "DOCUMENT") {
+        body.url = url.trim();
+      }
+      if (type === "WEBSITE" && singlePage) {
+        body.config = { maxDepth: 0 };
+      }
+
+      const sourceRes = await fetch("/api/sources", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: trimmedUrl,
-          type,
-          name: trimmedName || undefined,
-          ragEngineConfigId: ragEngineConfigId || null,
-          vectorStoreConfigId: vectorStoreConfigId || null,
-        }),
+        body: JSON.stringify(body),
       });
 
-      if (!response.ok) {
-        const data = (await response.json()) as { error?: { message?: string } };
-        throw new Error(data.error?.message ?? `Request failed with status ${response.status}`);
+      if (!sourceRes.ok) {
+        const data = (await sourceRes.json()) as { error?: { message?: string } | string };
+        const msg = typeof data.error === "object"
+          ? (data.error?.message ?? `Request failed with status ${sourceRes.status}`)
+          : (data.error ?? `Request failed with status ${sourceRes.status}`);
+        throw new Error(msg);
+      }
+
+      const { source } = (await sourceRes.json()) as { source: { id: string } };
+
+      // Step 2: upload file for DOCUMENT sources
+      if (type === "DOCUMENT" && file) {
+        setLoadingStep("Uploading file...");
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const uploadRes = await fetch(`/api/sources/${source.id}/documents`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const data = (await uploadRes.json()) as { error?: { message?: string } };
+          throw new Error(data.error?.message ?? `Upload failed with status ${uploadRes.status}`);
+        }
       }
 
       handleOpenChange(false);
@@ -131,10 +157,10 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsLoading(false);
+      setLoadingStep("");
     }
   }
 
-  const typeInfo = TYPE_LABELS[type];
   const hasRagConfigs = ragConfigs.length > 0;
   const hasVectorStoreConfigs = vectorStoreConfigs.length > 0;
   const showConfigSection = hasRagConfigs || hasVectorStoreConfigs;
@@ -145,7 +171,7 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
         <DialogHeader>
           <DialogTitle>Add Source</DialogTitle>
           <DialogDescription>
-            Connect a website, GitHub repository, or create a document source.
+            Connect a website, GitHub repository, or upload documents.
           </DialogDescription>
         </DialogHeader>
 
@@ -172,22 +198,96 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
             </div>
           </div>
 
-          {/* URL input */}
-          <div className="space-y-1.5">
-            <Label htmlFor="source-url">{typeInfo.label}</Label>
-            <Input
-              id="source-url"
-              type="url"
-              placeholder={typeInfo.placeholder}
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              disabled={isLoading}
-              required
-            />
-            <p className="text-xs" style={{ color: "var(--app-text-muted)" }}>
-              {typeInfo.hint}
-            </p>
-          </div>
+          {/* WEBSITE: URL + single-page toggle */}
+          {type === "WEBSITE" && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="source-url">Website URL</Label>
+                <Input
+                  id="source-url"
+                  type="url"
+                  placeholder="https://docs.example.com"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  disabled={isLoading}
+                  required
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSinglePage(false)}
+                  className={[
+                    "flex-1 py-1.5 px-3 rounded text-xs font-medium border transition-colors",
+                    !singlePage
+                      ? "border-[var(--app-accent-green)] text-[var(--app-accent-green)] bg-[var(--app-accent-green)]/10"
+                      : "border-[var(--app-card-border)] text-[var(--app-text-secondary)] hover:border-[var(--app-text-secondary)]",
+                  ].join(" ")}
+                >
+                  Crawl entire site
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSinglePage(true)}
+                  className={[
+                    "flex-1 py-1.5 px-3 rounded text-xs font-medium border transition-colors",
+                    singlePage
+                      ? "border-[var(--app-accent-green)] text-[var(--app-accent-green)] bg-[var(--app-accent-green)]/10"
+                      : "border-[var(--app-card-border)] text-[var(--app-text-secondary)] hover:border-[var(--app-text-secondary)]",
+                  ].join(" ")}
+                >
+                  Single page only
+                </button>
+              </div>
+              <p className="text-xs" style={{ color: "var(--app-text-muted)" }}>
+                {singlePage
+                  ? "Only the provided URL will be indexed."
+                  : "We will crawl the site and index all reachable pages."}
+              </p>
+            </>
+          )}
+
+          {/* GITHUB: URL */}
+          {type === "GITHUB" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="source-url">GitHub Repository URL</Label>
+              <Input
+                id="source-url"
+                type="url"
+                placeholder="https://github.com/owner/repo"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                disabled={isLoading}
+                required
+              />
+              <p className="text-xs" style={{ color: "var(--app-text-muted)" }}>
+                We will index .md, .ts, .js, and .py files from the repository.
+              </p>
+            </div>
+          )}
+
+          {/* DOCUMENT: file picker */}
+          {type === "DOCUMENT" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="source-file">File</Label>
+              <input
+                ref={fileInputRef}
+                id="source-file"
+                type="file"
+                accept=".pdf,.txt,.md,.mdx,.csv,.docx,.doc"
+                disabled={isLoading}
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm cursor-pointer rounded-md border px-3 py-1.5 bg-transparent"
+                style={{
+                  borderColor: "var(--app-card-border)",
+                  color: "var(--app-text-primary)",
+                }}
+              />
+              <p className="text-xs" style={{ color: "var(--app-text-muted)" }}>
+                Supported: PDF, TXT, MD, CSV, DOCX
+              </p>
+            </div>
+          )}
 
           {/* Optional name */}
           <div className="space-y-1.5">
@@ -197,7 +297,7 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
             <Input
               id="source-name"
               type="text"
-              placeholder="My Documentation"
+              placeholder={type === "DOCUMENT" ? file?.name ?? "My Documents" : "My Documentation"}
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={isLoading}
@@ -290,7 +390,7 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
               Cancel
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Adding..." : "Add Source"}
+              {isLoading ? (loadingStep || "Adding...") : type === "DOCUMENT" ? "Upload" : "Add Source"}
             </Button>
           </DialogFooter>
         </form>

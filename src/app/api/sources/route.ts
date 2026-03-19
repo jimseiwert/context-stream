@@ -12,6 +12,7 @@ import {
 import { eq, or, desc } from "drizzle-orm";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { checkQuota } from "@/lib/subscriptions/usage-tracker";
+import crypto from "crypto";
 
 const saasMode = process.env.NEXT_PUBLIC_SAAS_MODE === "true";
 
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as Record<string, unknown>;
 
-    const url = typeof body.url === "string" ? body.url.trim() : "";
+    let url = typeof body.url === "string" ? body.url.trim() : "";
     const type = typeof body.type === "string" ? body.type.trim().toUpperCase() : "";
     const name = typeof body.name === "string" ? body.name.trim() : undefined;
     const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : undefined;
@@ -101,9 +102,6 @@ export async function POST(request: NextRequest) {
     const ragEngineConfigId = typeof body.ragEngineConfigId === "string" ? body.ragEngineConfigId : null;
     const vectorStoreConfigId = typeof body.vectorStoreConfigId === "string" ? body.vectorStoreConfigId : null;
 
-    if (!url) {
-      throw new ValidationError("url is required");
-    }
     if (!["WEBSITE", "GITHUB", "DOCUMENT"].includes(type)) {
       throw new ValidationError("type must be WEBSITE, GITHUB, or DOCUMENT");
     }
@@ -111,10 +109,19 @@ export async function POST(request: NextRequest) {
       throw new ValidationError("scope must be GLOBAL or WORKSPACE");
     }
 
+    // DOCUMENT sources don't require a URL — auto-generate a unique identifier
+    if (type === "DOCUMENT" && !url) {
+      url = `document://${crypto.randomUUID()}`;
+    }
+
+    if (!url) {
+      throw new ValidationError("url is required");
+    }
+
     // Extract domain from URL
     let domain: string;
     try {
-      domain = new URL(url).hostname;
+      domain = new URL(url).hostname || "documents";
     } catch {
       throw new ValidationError("url must be a valid URL");
     }
