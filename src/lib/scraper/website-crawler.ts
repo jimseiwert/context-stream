@@ -9,6 +9,8 @@ export interface CrawlConfig {
   includePatterns?: string[];
   excludePatterns?: string[];
   rateLimitMs?: number;
+  /** Called each time a new page is successfully crawled, with the running count */
+  onPageCrawled?: (count: number) => void | Promise<void>;
 }
 
 export interface CrawledPage {
@@ -100,6 +102,7 @@ export async function crawlWebsite(
     includePatterns = [],
     excludePatterns = [],
     rateLimitMs = DEFAULT_RATE_LIMIT_MS,
+    onPageCrawled,
   } = config;
 
   const results: CrawledPage[] = [];
@@ -190,6 +193,9 @@ export async function crawlWebsite(
           crawledAt: new Date().toISOString(),
         },
       });
+      if (onPageCrawled) {
+        await onPageCrawled(results.length);
+      }
     }
 
     // Discover child links for next depth level

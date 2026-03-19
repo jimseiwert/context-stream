@@ -24,10 +24,10 @@ function generateZeroEmbeddings(
 /**
  * Processes a single batch of texts through the configured embedding provider.
  */
-async function embedBatch(texts: string[]): Promise<number[][]> {
+async function embedBatch(texts: string[], vectorStoreConfigId?: string | null): Promise<number[][]> {
   let config;
   try {
-    config = await getActiveEmbeddingConfig();
+    config = await getActiveEmbeddingConfig(vectorStoreConfigId);
   } catch {
     console.warn(
       "[Embeddings] No active embedding config — returning zero embeddings"
@@ -135,17 +135,17 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
 
 /**
  * Generates embeddings for an array of texts.
- * Reads the active provider config from DB, batches requests (max 100 per batch),
- * and returns a 2D array of embedding vectors.
+ * If vectorStoreConfigId is provided, uses that specific store config.
+ * Otherwise uses the globally active one.
  */
-export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
+export async function generateEmbeddings(texts: string[], vectorStoreConfigId?: string | null): Promise<number[][]> {
   if (texts.length === 0) return [];
 
   const allEmbeddings: number[][] = [];
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const batch = texts.slice(i, i + BATCH_SIZE);
-    const embeddings = await embedBatch(batch);
+    const embeddings = await embedBatch(batch, vectorStoreConfigId);
     allEmbeddings.push(...embeddings);
   }
 

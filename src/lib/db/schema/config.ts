@@ -113,7 +113,7 @@ export const vectorStoreConfigs = pgTable(
 // provider is plain text for extensibility, e.g. 'vertex_ai_rag_engine'.
 //
 // connectionConfig: AES-256-GCM encrypted JSON, shape depends on provider:
-//   vertex_ai_rag_engine → { projectId, location, ragCorpusName,
+//   vertex_ai_rag_engine → { projectId, location, ragCorpusId,
 //                            serviceAccountJson?: object }
 // ---------------------------------------------------------------------------
 export const ragEngineConfigs = pgTable(

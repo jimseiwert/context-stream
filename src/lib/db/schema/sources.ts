@@ -4,6 +4,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -20,6 +21,7 @@ import {
   sourceStatusEnum,
   sourceTypeEnum,
 } from "./enums";
+import { ragEngineConfigs, vectorStoreConfigs } from "./config";
 
 // Custom pgvector type for embeddings
 const vector = customType<{
@@ -66,6 +68,10 @@ export const sources = pgTable(
     createdById: text("createdById"),
     promotedToGlobalAt: timestamp("promotedToGlobalAt", { mode: "date" }),
     promotedById: text("promotedById"),
+    /** Optional: pin this source to a specific RAG engine instead of the global active one */
+    ragEngineConfigId: uuid("ragEngineConfigId"),
+    /** Optional: pin this source to a specific vector store instead of the global active one */
+    vectorStoreConfigId: uuid("vectorStoreConfigId"),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
   },
@@ -78,6 +84,14 @@ export const sources = pgTable(
     rescrapeScheduleIdx: index("Source_rescrapeSchedule_idx").on(
       table.rescrapeSchedule
     ),
+    ragEngineConfigFk: foreignKey({
+      columns: [table.ragEngineConfigId],
+      foreignColumns: [ragEngineConfigs.id],
+    }).onDelete("set null"),
+    vectorStoreConfigFk: foreignKey({
+      columns: [table.vectorStoreConfigId],
+      foreignColumns: [vectorStoreConfigs.id],
+    }).onDelete("set null"),
   })
 );
 

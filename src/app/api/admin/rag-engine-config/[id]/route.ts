@@ -9,10 +9,53 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/lib/utils/errors";
-import { encryptApiKey } from "@/lib/utils/encryption";
+import { encryptApiKey, decryptApiKey } from "@/lib/utils/encryption";
 import { eq, ne } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAdmin();
+    const { id } = await params;
+
+    const existing = await db.query.ragEngineConfigs.findFirst({
+      where: eq(ragEngineConfigs.id, id),
+    });
+
+    if (!existing) throw new NotFoundError("RagEngineConfig");
+
+    // Decrypt and return non-sensitive fields only.
+    // serviceAccountJson is not returned — only whether one is stored.
+    let decrypted: Record<string, unknown> = {};
+    try {
+      decrypted = JSON.parse(decryptApiKey(existing.connectionConfig)) as Record<string, unknown>;
+    } catch {
+      // If decryption fails, return empty fields (user must re-enter)
+    }
+
+    const { serviceAccountJson, ...nonSensitive } = decrypted as {
+      serviceAccountJson?: unknown;
+      [key: string]: unknown;
+    };
+
+    return NextResponse.json({
+      config: {
+        id: existing.id,
+        name: existing.name,
+        provider: existing.provider,
+        isActive: existing.isActive,
+        connectionConfig: nonSensitive,
+        hasServiceAccountJson: Boolean(serviceAccountJson),
+      },
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -64,9 +107,24 @@ export async function PATCH(
       typeof body.connectionConfig === "object" &&
       !Array.isArray(body.connectionConfig)
     ) {
-      updateData.connectionConfig = encryptApiKey(
-        JSON.stringify(body.connectionConfig as Record<string, unknown>)
-      );
+      const incoming = body.connectionConfig as Record<string, unknown>;
+
+      // If serviceAccountJson is absent or empty, preserve the existing one
+      // so the user doesn't have to re-upload it on every edit.
+      if (!incoming.serviceAccountJson) {
+        try {
+          const existingDecrypted = JSON.parse(
+            decryptApiKey(existing.connectionConfig)
+          ) as Record<string, unknown>;
+          if (existingDecrypted.serviceAccountJson) {
+            incoming.serviceAccountJson = existingDecrypted.serviceAccountJson;
+          }
+        } catch {
+          // If decryption fails, proceed without merging
+        }
+      }
+
+      updateData.connectionConfig = encryptApiKey(JSON.stringify(incoming));
     }
 
     if (Object.keys(updateData).length === 0) {

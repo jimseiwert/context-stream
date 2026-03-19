@@ -33,8 +33,10 @@ export interface ProviderConfigFormProps {
   fields: FieldDefinition[];
   defaultValues?: Record<string, unknown>;
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
+  onTest?: (values: Record<string, unknown>) => void | Promise<void>;
   submitLabel?: string;
   isLoading?: boolean;
+  isTesting?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,8 +47,10 @@ export function ProviderConfigForm({
   fields,
   defaultValues = {},
   onSubmit,
+  onTest,
   submitLabel = "Save",
   isLoading = false,
+  isTesting = false,
 }: ProviderConfigFormProps) {
   // Build initial form values: seed from defaultValues, fill missing required
   // fields with empty string so react-hook-form tracks them.
@@ -249,10 +253,23 @@ export function ProviderConfigForm({
           />
         ))}
 
-        <Button type="submit" disabled={isLoading} className="w-full">
-          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {submitLabel}
-        </Button>
+        <div className={onTest ? "flex gap-2" : ""}>
+          {onTest && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isLoading || isTesting}
+              onClick={() => void onTest(form.getValues())}
+            >
+              {isTesting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isTesting ? "Testing…" : "Test Connection"}
+            </Button>
+          )}
+          <Button type="submit" disabled={isLoading || isTesting} className={onTest ? "flex-1" : "w-full"}>
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {submitLabel}
+          </Button>
+        </div>
       </form>
     </Form>
   );

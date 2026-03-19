@@ -31,6 +31,7 @@ export const vertexAIEmbeddingProvider: EmbeddingProviderDescriptor<VertexAIEmbe
       options: [
         { value: 'us-central1', label: 'us-central1' },
         { value: 'us-east1', label: 'us-east1' },
+        { value: 'us-east5', label: 'us-east5' },
         { value: 'europe-west1', label: 'europe-west1' },
         { value: 'asia-northeast1', label: 'asia-northeast1' },
       ],

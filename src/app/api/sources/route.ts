@@ -98,6 +98,8 @@ export async function POST(request: NextRequest) {
     const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : undefined;
     const config = body.config && typeof body.config === "object" ? body.config : {};
     const scope = typeof body.scope === "string" ? body.scope.toUpperCase() : "WORKSPACE";
+    const ragEngineConfigId = typeof body.ragEngineConfigId === "string" ? body.ragEngineConfigId : null;
+    const vectorStoreConfigId = typeof body.vectorStoreConfigId === "string" ? body.vectorStoreConfigId : null;
 
     if (!url) {
       throw new ValidationError("url is required");
@@ -129,6 +131,8 @@ export async function POST(request: NextRequest) {
         config: config as Record<string, unknown>,
         status: "PENDING",
         createdById: userId,
+        ragEngineConfigId: ragEngineConfigId ?? null,
+        vectorStoreConfigId: vectorStoreConfigId ?? null,
       })
       .returning();
 

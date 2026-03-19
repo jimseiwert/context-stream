@@ -65,7 +65,7 @@
     }
   },
 
-  "forwardPorts": [3000, 5432, 6379],
+  "forwardPorts": [3000, 5432, aude],
   "portsAttributes": {
     "3000": {
       "label": "Next.js App",

@@ -1,0 +1,4 @@
+ALTER TABLE "Source" ADD COLUMN "ragEngineConfigId" uuid;--> statement-breakpoint
+ALTER TABLE "Source" ADD COLUMN "vectorStoreConfigId" uuid;--> statement-breakpoint
+ALTER TABLE "Source" ADD CONSTRAINT "Source_ragEngineConfigId_rag_engine_configs_id_fk" FOREIGN KEY ("ragEngineConfigId") REFERENCES "public"."rag_engine_configs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "Source" ADD CONSTRAINT "Source_vectorStoreConfigId_vector_store_configs_id_fk" FOREIGN KEY ("vectorStoreConfigId") REFERENCES "public"."vector_store_configs"("id") ON DELETE set null ON UPDATE no action;

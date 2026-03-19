@@ -1,6 +1,6 @@
 {
-  "id": "3c667227-c8fb-4355-b47d-7716514a41c0",
-  "prevId": "a2629cdb-c259-4008-a851-a2ae1c0642bf",
+  "id": "6017a164-d10c-4d97-8c17-7d07ef02cfd9",
+  "prevId": "3c667227-c8fb-4355-b47d-7716514a41c0",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1545,6 +1545,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "ragEngineConfigId": {
+          "name": "ragEngineConfigId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vectorStoreConfigId": {
+          "name": "vectorStoreConfigId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp",
@@ -1652,7 +1664,34 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "Source_ragEngineConfigId_rag_engine_configs_id_fk": {
+          "name": "Source_ragEngineConfigId_rag_engine_configs_id_fk",
+          "tableFrom": "Source",
+          "tableTo": "rag_engine_configs",
+          "columnsFrom": [
+            "ragEngineConfigId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "Source_vectorStoreConfigId_vector_store_configs_id_fk": {
+          "name": "Source_vectorStoreConfigId_vector_store_configs_id_fk",
+          "tableFrom": "Source",
+          "tableTo": "vector_store_configs",
+          "columnsFrom": [
+            "vectorStoreConfigId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "Source_url_unique": {

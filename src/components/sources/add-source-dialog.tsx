@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -20,6 +20,13 @@ interface AddSourceDialogProps {
 }
 
 type SourceType = "WEBSITE" | "GITHUB" | "DOCUMENT";
+
+interface ConfigOption {
+  id: string;
+  name: string;
+  provider: string;
+  isActive: boolean;
+}
 
 const TYPE_LABELS: Record<SourceType, { label: string; placeholder: string; hint: string }> = {
   WEBSITE: {
@@ -44,13 +51,32 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
   const [type, setType] = useState<SourceType>("WEBSITE");
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+  const [ragEngineConfigId, setRagEngineConfigId] = useState<string>("");
+  const [vectorStoreConfigId, setVectorStoreConfigId] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [ragConfigs, setRagConfigs] = useState<ConfigOption[]>([]);
+  const [vectorStoreConfigs, setVectorStoreConfigs] = useState<ConfigOption[]>([]);
+
+  // Fetch available configs when dialog opens
+  useEffect(() => {
+    if (!open) return;
+    void Promise.all([
+      fetch("/api/admin/rag-engine-config").then((r) => r.json()).catch(() => ({ configs: [] })),
+      fetch("/api/admin/vector-store-config").then((r) => r.json()).catch(() => ({ configs: [] })),
+    ]).then(([ragData, vsData]) => {
+      setRagConfigs((ragData as { configs?: ConfigOption[] }).configs ?? []);
+      setVectorStoreConfigs((vsData as { configs?: ConfigOption[] }).configs ?? []);
+    });
+  }, [open]);
 
   function reset() {
     setType("WEBSITE");
     setUrl("");
     setName("");
+    setRagEngineConfigId("");
+    setVectorStoreConfigId("");
     setError(null);
     setIsLoading(false);
   }
@@ -89,6 +115,8 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
           url: trimmedUrl,
           type,
           name: trimmedName || undefined,
+          ragEngineConfigId: ragEngineConfigId || null,
+          vectorStoreConfigId: vectorStoreConfigId || null,
         }),
       });
 
@@ -107,6 +135,9 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
   }
 
   const typeInfo = TYPE_LABELS[type];
+  const hasRagConfigs = ragConfigs.length > 0;
+  const hasVectorStoreConfigs = vectorStoreConfigs.length > 0;
+  const showConfigSection = hasRagConfigs || hasVectorStoreConfigs;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -172,6 +203,77 @@ export function AddSourceDialog({ open, onOpenChange }: AddSourceDialogProps) {
               disabled={isLoading}
             />
           </div>
+
+          {/* Index config overrides */}
+          {showConfigSection && (
+            <div className="space-y-3 pt-1">
+              <p className="text-xs font-medium" style={{ color: "var(--app-text-secondary)" }}>
+                Index Configuration{" "}
+                <span className="font-normal opacity-60">(optional — uses system default if not set)</span>
+              </p>
+
+              {hasRagConfigs && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="rag-engine-config">RAG Engine</Label>
+                  <select
+                    id="rag-engine-config"
+                    value={ragEngineConfigId}
+                    onChange={(e) => {
+                      setRagEngineConfigId(e.target.value);
+                      if (e.target.value) setVectorStoreConfigId("");
+                    }}
+                    disabled={isLoading}
+                    className="w-full rounded-md border px-3 py-1.5 text-sm bg-transparent"
+                    style={{
+                      borderColor: "var(--app-card-border)",
+                      color: "var(--app-text-primary)",
+                    }}
+                  >
+                    <option value="">System default</option>
+                    {ragConfigs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name || c.provider}
+                        {c.isActive ? " (active)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {hasVectorStoreConfigs && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="vector-store-config">Vector Store</Label>
+                  <select
+                    id="vector-store-config"
+                    value={vectorStoreConfigId}
+                    onChange={(e) => {
+                      setVectorStoreConfigId(e.target.value);
+                      if (e.target.value) setRagEngineConfigId("");
+                    }}
+                    disabled={isLoading}
+                    className="w-full rounded-md border px-3 py-1.5 text-sm bg-transparent"
+                    style={{
+                      borderColor: "var(--app-card-border)",
+                      color: "var(--app-text-primary)",
+                    }}
+                  >
+                    <option value="">System default</option>
+                    {vectorStoreConfigs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name || c.provider}
+                        {c.isActive ? " (active)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {ragEngineConfigId && (
+                    <p className="text-xs" style={{ color: "var(--app-text-muted)" }}>
+                      Disabled — RAG engine is selected (handles embedding internally).
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Error */}
           {error && (

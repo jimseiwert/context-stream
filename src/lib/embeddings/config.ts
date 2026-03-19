@@ -102,13 +102,18 @@ async function buildEmbeddingConfig(
 
 /**
  * Get the active embedding provider configuration (with decrypted credentials).
- * The embedding config is sourced from the active vectorStoreConfig.
- * Throws if no active vector store configuration is found.
+ * If specificId is provided, loads that vector store config directly.
+ * Otherwise falls back to the globally active one.
+ * Throws if neither is configured.
  */
-export async function getActiveEmbeddingConfig(): Promise<EmbeddingConfig> {
-  const config = await db.query.vectorStoreConfigs.findFirst({
-    where: eq(vectorStoreConfigs.isActive, true),
-  })
+export async function getActiveEmbeddingConfig(specificId?: string | null): Promise<EmbeddingConfig> {
+  const config = specificId
+    ? await db.query.vectorStoreConfigs.findFirst({
+        where: eq(vectorStoreConfigs.id, specificId),
+      })
+    : await db.query.vectorStoreConfigs.findFirst({
+        where: eq(vectorStoreConfigs.isActive, true),
+      })
 
   if (!config) {
     throw new Error(

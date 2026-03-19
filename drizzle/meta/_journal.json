@@ -22,6 +22,20 @@
       "when": 1742076000000,
       "tag": "0002_embedding_vector_store_redesign",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773912264242,
+      "tag": "0003_graceful_the_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773928900820,
+      "tag": "0004_common_sir_ram",
+      "breakpoints": true
     }
   ]
 }

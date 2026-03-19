@@ -4,6 +4,7 @@
 import { db } from "@/lib/db";
 import {
   vectorStoreConfigs,
+  ragEngineConfigs,
   jobs,
   chunks,
 } from "@/lib/db/schema";
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 import { SystemTabs } from "@/components/admin/system-tabs";
 import { TestEmbeddingButton } from "@/components/admin/test-embedding-button";
+import { TestRagEngineButton } from "@/components/admin/test-rag-engine-button";
 import { VectorStorePanel } from "@/components/admin/vector-store-panel";
 import { validateLicense, isLicenseValid, hasLicenseFeature } from "@/lib/license";
 
@@ -298,7 +300,7 @@ export default async function AdminSystemPage() {
   const k8sEnabled = process.env.FEATURE_K8S_DISPATCH === "true";
 
   // Parallel data fetches
-  const [dbHealth, chunkCountResult, vsConfigs, jobCounts, activeWorkerCount] =
+  const [dbHealth, chunkCountResult, vsConfigs, ragConfigs, jobCounts, activeWorkerCount] =
     await Promise.all([
       getDatabaseHealth(),
       db.select({ count: count() }).from(chunks),
@@ -312,6 +314,16 @@ export default async function AdminSystemPage() {
           embeddingCredentialId: true,
           useBatchForNew: true,
           useBatchForRescrape: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      db.query.ragEngineConfigs.findMany({
+        columns: {
+          id: true,
+          name: true,
+          provider: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
@@ -364,14 +376,14 @@ export default async function AdminSystemPage() {
 
   const chunkCount = Number(chunkCountResult[0]?.count ?? 0);
 
-  // Derive active embedding info from the active vector store config
+  // Derive active embedding/rag info
   const activeVectorStore = vsConfigs.find((c) => c.isActive) ?? null;
+  const activeRagEngine = ragConfigs.find((c) => c.isActive) ?? null;
   const activeEmbedding = activeVectorStore
-    ? {
-        provider: activeVectorStore.embeddingProvider,
-        name: activeVectorStore.name,
-      }
-    : null;
+    ? { provider: activeVectorStore.embeddingProvider, name: activeVectorStore.name, isRag: false }
+    : activeRagEngine
+      ? { provider: activeRagEngine.provider, name: activeRagEngine.name, isRag: true }
+      : null;
 
   // Feature flags
   const featureFlags = [
@@ -453,13 +465,19 @@ export default async function AdminSystemPage() {
       />
 
       <HealthCard
-        title="Embedding Provider"
+        title={activeEmbedding?.isRag ? "RAG Engine" : "Embedding Provider"}
         icon={<Zap size={14} />}
         status={activeEmbedding ? "ok" : "warn"}
         value={activeEmbedding ? activeEmbedding.provider : "None"}
-        sub={activeEmbedding ? `${activeEmbedding.name || activeEmbedding.provider}` : "No active config"}
+        sub={
+          activeEmbedding
+            ? activeEmbedding.isRag
+              ? `${activeEmbedding.name || activeEmbedding.provider} · handles embeddings internally`
+              : (activeEmbedding.name || activeEmbedding.provider)
+            : "No active config"
+        }
       >
-        <TestEmbeddingButton />
+        {activeEmbedding?.isRag ? <TestRagEngineButton /> : <TestEmbeddingButton />}
       </HealthCard>
 
       <HealthCard
@@ -490,12 +508,100 @@ export default async function AdminSystemPage() {
     </div>
   );
 
+  const RAG_ENGINE_LABELS: Record<string, string> = {
+    vertex_ai_rag_engine: "Vertex AI RAG Engine",
+  };
+
   const vectorStoreTab = (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      <p className="section-label" style={{ fontSize: "0.7rem" }}>
-        Vector Store Configs
-      </p>
-      <VectorStorePanel configs={vsConfigs} />
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <p className="section-label" style={{ fontSize: "0.7rem" }}>
+          Vector Store Configs
+        </p>
+        <VectorStorePanel configs={vsConfigs} />
+      </div>
+
+      {ragConfigs.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <p className="section-label" style={{ fontSize: "0.7rem" }}>
+            RAG Engine Configs
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {ragConfigs.map((cfg) => (
+              <div
+                key={cfg.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "1rem",
+                  padding: "0.75rem 1rem",
+                  borderRadius: "0.5rem",
+                  border: cfg.isActive
+                    ? "1px solid rgba(16,185,129,0.3)"
+                    : "1px solid var(--app-border, rgba(255,255,255,0.06))",
+                  background: cfg.isActive ? "rgba(16,185,129,0.05)" : "transparent",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  {cfg.isActive ? (
+                    <CheckCircle2 size={14} style={{ color: "var(--app-accent-green)", flexShrink: 0 }} />
+                  ) : (
+                    <XCircle size={14} style={{ color: "var(--app-text-muted)", flexShrink: 0 }} />
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span
+                        style={{
+                          fontSize: "0.65rem",
+                          fontWeight: 700,
+                          textTransform: "uppercase" as const,
+                          letterSpacing: "0.06em",
+                          color: "#4285f4",
+                          background: "rgba(66,133,244,0.12)",
+                          borderRadius: "9999px",
+                          padding: "0.1rem 0.4rem",
+                        }}
+                      >
+                        {RAG_ENGINE_LABELS[cfg.provider] ?? cfg.provider}
+                      </span>
+                      {cfg.name && (
+                        <span style={{ fontSize: "0.78rem", fontWeight: 500, color: "var(--app-text-primary)" }}>
+                          {cfg.name}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: "0.68rem", color: "var(--app-text-muted)" }}>
+                      Full-pipeline · handles chunking, embedding &amp; retrieval
+                    </span>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    textTransform: "uppercase" as const,
+                    letterSpacing: "0.06em",
+                    borderRadius: "9999px",
+                    padding: "0.15rem 0.5rem",
+                    background: cfg.isActive ? "rgba(16,185,129,0.12)" : "rgba(107,114,128,0.12)",
+                    color: cfg.isActive ? "var(--app-accent-green)" : "#9ca3af",
+                  }}
+                >
+                  {cfg.isActive ? "Active" : "Inactive"}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: "0.72rem", color: "var(--app-text-muted)" }}>
+            Manage RAG engine configs in{" "}
+            <a href="/admin/system-settings" style={{ color: "var(--app-accent-green)", textDecoration: "none" }}>
+              System Settings
+            </a>
+            .
+          </p>
+        </div>
+      )}
     </div>
   );
 

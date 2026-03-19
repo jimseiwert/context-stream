@@ -18,6 +18,10 @@ import { crawlConfluence } from "@/lib/scraper/confluence-crawler";
 import { crawlNotion } from "@/lib/scraper/notion-crawler";
 import { chunkText } from "@/lib/embeddings/chunker";
 import { generateEmbeddings } from "@/lib/embeddings/service";
+import {
+  getActiveRagEngineConfig,
+  uploadPageToRagCorpus,
+} from "@/lib/providers/rag-engine/ingest";
 import { sendSlackNotification } from "@/lib/notifications/slack";
 import { hasLicenseFeature } from "@/lib/license";
 import { WorkspaceMetadata } from "@/lib/db/schema/workspaces";
@@ -85,11 +89,11 @@ function computeChecksum(text: string): string {
  * Deletes old chunks for this page before inserting new ones.
  * Returns the number of chunks created.
  */
-async function processPageChunks(pageId: string, contentText: string): Promise<number> {
+async function processPageChunks(pageId: string, contentText: string, vectorStoreConfigId?: string | null): Promise<number> {
   const textChunks = chunkText(contentText);
   if (textChunks.length === 0) return 0;
 
-  const embeddings = await generateEmbeddings(textChunks);
+  const embeddings = await generateEmbeddings(textChunks, vectorStoreConfigId);
 
   // Delete old chunks for this page
   await db.delete(chunks).where(eq(chunks.pageId, pageId));
@@ -118,11 +122,11 @@ async function processPageChunks(pageId: string, contentText: string): Promise<n
  * Processes chunks for a document: similar to processPageChunks but uses documentId.
  * Returns the number of chunks created.
  */
-async function processDocumentChunks(documentId: string, contentText: string): Promise<number> {
+async function processDocumentChunks(documentId: string, contentText: string, vectorStoreConfigId?: string | null): Promise<number> {
   const textChunks = chunkText(contentText);
   if (textChunks.length === 0) return 0;
 
-  const embeddings = await generateEmbeddings(textChunks);
+  const embeddings = await generateEmbeddings(textChunks, vectorStoreConfigId);
 
   // Delete old chunks for this document
   await db.delete(chunks).where(eq(chunks.documentId, documentId));
@@ -288,6 +292,11 @@ export async function processDocumentPipeline(
     const config = (source.config ?? {}) as SourceConfig;
     let pageCount = 0;
 
+    // Resolve RAG engine: use source-pinned config if set, otherwise fall back to global active
+    const ragConfig = await getActiveRagEngineConfig(source.ragEngineConfigId ?? null);
+    // Resolve vector store: use source-pinned config if set, otherwise fall back to global active
+    const vectorStoreConfigId = source.vectorStoreConfigId ?? null;
+
     if (source.type === "WEBSITE") {
       await appendLog(jobId, `Starting crawl for ${source.url}...`);
 
@@ -295,6 +304,11 @@ export async function processDocumentPipeline(
         maxDepth: config.maxDepth,
         includePatterns: config.includePatterns,
         excludePatterns: config.excludePatterns,
+        onPageCrawled: async (crawledCount: number) => {
+          await appendLog(jobId, `Crawling... ${crawledCount} pages found so far`);
+          progress.pagesFound = crawledCount;
+          await updateProgress(jobId, progress);
+        },
       });
 
       console.log(
@@ -307,7 +321,7 @@ export async function processDocumentPipeline(
 
       for (let i = 0; i < crawledPages.length; i++) {
         const crawledPage = crawledPages[i];
-        await appendLog(jobId, `Crawling URL: ${crawledPage.url} (${i + 1}/${crawledPages.length})`);
+        await appendLog(jobId, `Processing page ${i + 1}/${crawledPages.length}: ${crawledPage.url}`);
 
         const pageId = await upsertPage(
           sourceId,
@@ -317,17 +331,33 @@ export async function processDocumentPipeline(
           crawledPage.metadata as Record<string, unknown>
         );
 
-        await appendLog(jobId, `Chunking page ${i + 1}/${crawledPages.length}`);
-        const chunkCount = await processPageChunks(pageId, crawledPage.contentText);
+        let chunkCount = 0;
+        if (ragConfig) {
+          // RAG engine handles chunking + embedding internally — upload full page
+          try {
+            await uploadPageToRagCorpus(
+              ragConfig,
+              crawledPage.title || crawledPage.url,
+              crawledPage.contentText,
+              crawledPage.url
+            );
+            await appendLog(jobId, `Uploaded to RAG corpus: ${crawledPage.url}`);
+          } catch (ragErr) {
+            const ragMsg = ragErr instanceof Error ? ragErr.message : String(ragErr);
+            await appendLog(jobId, `Warning: RAG ingest failed for ${crawledPage.url}: ${ragMsg}`);
+            console.warn(`[Pipeline] RAG ingest failed for ${crawledPage.url}:`, ragErr);
+          }
+        } else {
+          chunkCount = await processPageChunks(pageId, crawledPage.contentText, vectorStoreConfigId);
+        }
 
-        await appendLog(jobId, `Generating embeddings for ${chunkCount} chunks`);
         pageCount++;
         progress.pagesProcessed = pageCount;
         progress.chunksCreated += chunkCount;
         await updateProgress(jobId, progress);
       }
 
-      await appendLog(jobId, "Saving chunks...");
+      await appendLog(jobId, ragConfig ? "RAG ingestion complete." : "Saving chunks...");
     } else if (source.type === "GITHUB") {
       await appendLog(jobId, `Starting crawl for GitHub repo: ${source.url}...`);
 
@@ -348,7 +378,7 @@ export async function processDocumentPipeline(
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const fileUrl = file.metadata.repoUrl;
-        await appendLog(jobId, `Crawling URL: ${fileUrl} (${i + 1}/${files.length})`);
+        await appendLog(jobId, `Processing file ${i + 1}/${files.length}: ${fileUrl}`);
 
         const pageId = await upsertPage(
           sourceId,
@@ -358,17 +388,26 @@ export async function processDocumentPipeline(
           file.metadata as unknown as Record<string, unknown>
         );
 
-        await appendLog(jobId, `Chunking page ${i + 1}/${files.length}`);
-        const chunkCount = await processPageChunks(pageId, file.contentText);
+        let chunkCount = 0;
+        if (ragConfig) {
+          try {
+            await uploadPageToRagCorpus(ragConfig, file.title || fileUrl, file.contentText, fileUrl);
+            await appendLog(jobId, `Uploaded to RAG corpus: ${fileUrl}`);
+          } catch (ragErr) {
+            const ragMsg = ragErr instanceof Error ? ragErr.message : String(ragErr);
+            await appendLog(jobId, `Warning: RAG ingest failed for ${fileUrl}: ${ragMsg}`);
+          }
+        } else {
+          chunkCount = await processPageChunks(pageId, file.contentText, vectorStoreConfigId);
+        }
 
-        await appendLog(jobId, `Generating embeddings for ${chunkCount} chunks`);
         pageCount++;
         progress.pagesProcessed = pageCount;
         progress.chunksCreated += chunkCount;
         await updateProgress(jobId, progress);
       }
 
-      await appendLog(jobId, "Saving chunks...");
+      await appendLog(jobId, ragConfig ? "RAG ingestion complete." : "Saving chunks...");
     } else if (source.type === "DOCUMENT") {
       // Process existing documents for this source (e.g., after re-index trigger)
       const sourceDocs = await db.query.documents.findMany({
@@ -384,7 +423,7 @@ export async function processDocumentPipeline(
         const doc = sourceDocs[i];
         await appendLog(jobId, `Chunking page ${i + 1}/${sourceDocs.length}`);
 
-        const chunkCount = await processDocumentChunks(doc.id, doc.contentText);
+        const chunkCount = await processDocumentChunks(doc.id, doc.contentText, vectorStoreConfigId);
         await appendLog(jobId, `Generating embeddings for ${chunkCount} chunks`);
 
         // Mark document as indexed
@@ -440,8 +479,18 @@ export async function processDocumentPipeline(
           crawledPage.metadata as Record<string, unknown>
         );
 
-        const chunkCount = await processPageChunks(pageId, crawledPage.contentText);
-        await appendLog(jobId, `Generated ${chunkCount} chunks`);
+        let chunkCount = 0;
+        if (ragConfig) {
+          try {
+            await uploadPageToRagCorpus(ragConfig, crawledPage.title, crawledPage.contentText, crawledPage.url);
+            await appendLog(jobId, `Uploaded to RAG corpus: ${crawledPage.url}`);
+          } catch (ragErr) {
+            const ragMsg = ragErr instanceof Error ? ragErr.message : String(ragErr);
+            await appendLog(jobId, `Warning: RAG ingest failed for ${crawledPage.url}: ${ragMsg}`);
+          }
+        } else {
+          chunkCount = await processPageChunks(pageId, crawledPage.contentText, vectorStoreConfigId);
+        }
 
         pageCount++;
         progress.pagesProcessed = pageCount;
@@ -449,7 +498,7 @@ export async function processDocumentPipeline(
         await updateProgress(jobId, progress);
       }
 
-      await appendLog(jobId, "Saving chunks...");
+      await appendLog(jobId, ragConfig ? "RAG ingestion complete." : "Saving chunks...");
     } else if (source.type === "NOTION") {
       // Enterprise: Notion crawler — gated by hasLicenseFeature('notion')
       await appendLog(jobId, `Starting Notion crawl...`);
@@ -495,8 +544,18 @@ export async function processDocumentPipeline(
           crawledPage.metadata as Record<string, unknown>
         );
 
-        const chunkCount = await processPageChunks(pageId, crawledPage.contentText);
-        await appendLog(jobId, `Generated ${chunkCount} chunks`);
+        let chunkCount = 0;
+        if (ragConfig) {
+          try {
+            await uploadPageToRagCorpus(ragConfig, crawledPage.title, crawledPage.contentText, crawledPage.url);
+            await appendLog(jobId, `Uploaded to RAG corpus: ${crawledPage.url}`);
+          } catch (ragErr) {
+            const ragMsg = ragErr instanceof Error ? ragErr.message : String(ragErr);
+            await appendLog(jobId, `Warning: RAG ingest failed for ${crawledPage.url}: ${ragMsg}`);
+          }
+        } else {
+          chunkCount = await processPageChunks(pageId, crawledPage.contentText, vectorStoreConfigId);
+        }
 
         pageCount++;
         progress.pagesProcessed = pageCount;
@@ -504,7 +563,7 @@ export async function processDocumentPipeline(
         await updateProgress(jobId, progress);
       }
 
-      await appendLog(jobId, "Saving chunks...");
+      await appendLog(jobId, ragConfig ? "RAG ingestion complete." : "Saving chunks...");
     }
 
     // Update source: ACTIVE + timestamps + page count
