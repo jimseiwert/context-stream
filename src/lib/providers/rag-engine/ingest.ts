@@ -76,12 +76,17 @@ export async function getActiveRagEngineConfig(
  * @param content - Plain-text content to index
  * @param sourceUrl - Original URL, stored as description metadata
  */
+/**
+ * Uploads a single page to the active Vertex AI RAG corpus as a RAG file.
+ * Returns the RAG file resource name (e.g. projects/.../ragFiles/123) so it
+ * can be persisted and later used for deletion.
+ */
 export async function uploadPageToRagCorpus(
   connection: RagEngineConnection,
   displayName: string,
   content: string,
   sourceUrl: string
-): Promise<void> {
+): Promise<string> {
   const { projectId, location, ragCorpusId, serviceAccountJson } = connection;
 
   const corpusName = buildRagCorpusName(projectId, location, ragCorpusId);
@@ -138,5 +143,38 @@ export async function uploadPageToRagCorpus(
       detail = raw.slice(0, 400) || res.statusText;
     }
     throw new Error(`Vertex AI RAG upload failed (${res.status}): ${detail}`);
+  }
+
+  const data = (await res.json()) as { name?: string };
+  if (!data.name) {
+    throw new Error("Vertex AI RAG upload succeeded but returned no file name");
+  }
+  return data.name;
+}
+
+/**
+ * Deletes a previously-uploaded RAG file from the Vertex AI corpus.
+ * Silently ignores 404 (file already gone).
+ */
+export async function deleteRagFile(
+  connection: RagEngineConnection,
+  ragFileName: string
+): Promise<void> {
+  const { location, serviceAccountJson } = connection;
+  const token = await getGcpBearerToken(serviceAccountJson);
+
+  const endpoint = `https://${location}-aiplatform.googleapis.com/v1beta1/${ragFileName}`;
+
+  const res = await fetch(endpoint, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!res.ok && res.status !== 404) {
+    const raw = await res.text().catch(() => "");
+    console.warn(
+      `[RagIngest] Failed to delete RAG file ${ragFileName} (${res.status}): ${raw.slice(0, 200)}`
+    );
   }
 }

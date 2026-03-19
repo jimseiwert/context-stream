@@ -109,6 +109,8 @@ export const pages = pgTable(
     contentHtml: text("contentHtml"),
     metadata: jsonb("metadata"),
     checksum: text("checksum").notNull(),
+    /** RAG file resource name returned by Vertex AI — used for cleanup on delete */
+    ragFileId: text("ragFileId"),
     indexedAt: timestamp("indexedAt", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
   },
@@ -137,6 +139,8 @@ export const documents = pgTable(
     metadata: jsonb("metadata"),
     checksum: text("checksum").notNull(),
     storagePath: text("storagePath"),
+    /** RAG file resource name returned by Vertex AI — used for cleanup on delete */
+    ragFileId: text("ragFileId"),
     uploadedAt: timestamp("uploadedAt", { mode: "date" })
       .defaultNow()
       .notNull(),

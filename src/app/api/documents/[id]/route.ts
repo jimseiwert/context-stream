@@ -7,6 +7,7 @@ import { sources, pages, documents, chunks } from "@/lib/db/schema";
 import { requireAuth } from "@/lib/auth/middleware";
 import { handleApiError, NotFoundError, ValidationError } from "@/lib/utils/errors";
 import { eq, and } from "drizzle-orm";
+import { getActiveRagEngineConfig, deleteRagFile } from "@/lib/providers/rag-engine/ingest";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -92,18 +93,38 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (type === "page") {
       const existing = await db.query.pages.findFirst({
         where: eq(pages.id, id),
-        columns: { id: true },
+        columns: { id: true, ragFileId: true, sourceId: true },
       });
       if (!existing) throw new NotFoundError("Page");
+
+      // Clean up RAG corpus file if one was uploaded
+      if (existing.ragFileId) {
+        const source = await db.query.sources.findFirst({
+          where: eq(sources.id, existing.sourceId),
+          columns: { ragEngineConfigId: true },
+        });
+        const ragConfig = await getActiveRagEngineConfig(source?.ragEngineConfigId ?? null);
+        if (ragConfig) await deleteRagFile(ragConfig, existing.ragFileId);
+      }
 
       // Chunks cascade delete via FK
       await db.delete(pages).where(eq(pages.id, id));
     } else {
       const existing = await db.query.documents.findFirst({
         where: eq(documents.id, id),
-        columns: { id: true },
+        columns: { id: true, ragFileId: true, sourceId: true },
       });
       if (!existing) throw new NotFoundError("Document");
+
+      // Clean up RAG corpus file if one was uploaded
+      if (existing.ragFileId) {
+        const source = await db.query.sources.findFirst({
+          where: eq(sources.id, existing.sourceId),
+          columns: { ragEngineConfigId: true },
+        });
+        const ragConfig = await getActiveRagEngineConfig(source?.ragEngineConfigId ?? null);
+        if (ragConfig) await deleteRagFile(ragConfig, existing.ragFileId);
+      }
 
       // Chunks cascade delete via FK
       await db.delete(documents).where(eq(documents.id, id));

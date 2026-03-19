@@ -11,6 +11,7 @@ import {
   ValidationError,
 } from "@/lib/utils/errors";
 import { eq, count } from "drizzle-orm";
+import { getActiveRagEngineConfig, deleteRagFile } from "@/lib/providers/rag-engine/ingest";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -115,7 +116,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
     const source = await db.query.sources.findFirst({
       where: eq(sources.id, id),
-      columns: { id: true, createdById: true },
+      columns: { id: true, createdById: true, ragEngineConfigId: true },
     });
 
     if (!source) {
@@ -125,6 +126,28 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     // Only the creator or an admin can delete
     if (source.createdById !== userId && session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN") {
       throw new ForbiddenError("You do not have permission to delete this source");
+    }
+
+    // Clean up RAG corpus files before deleting from postgres
+    const ragConfig = await getActiveRagEngineConfig(source.ragEngineConfigId ?? null);
+    if (ragConfig) {
+      const pagesWithRag = await db
+        .select({ id: pages.id, ragFileId: pages.ragFileId })
+        .from(pages)
+        .where(eq(pages.sourceId, id));
+      const docsWithRag = await db
+        .select({ id: documents.id, ragFileId: documents.ragFileId })
+        .from(documents)
+        .where(eq(documents.sourceId, id));
+
+      await Promise.allSettled([
+        ...pagesWithRag
+          .filter((p) => p.ragFileId)
+          .map((p) => deleteRagFile(ragConfig, p.ragFileId!)),
+        ...docsWithRag
+          .filter((d) => d.ragFileId)
+          .map((d) => deleteRagFile(ragConfig, d.ragFileId!)),
+      ]);
     }
 
     // Cascade: chunks referencing pages of this source

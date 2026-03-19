@@ -335,12 +335,13 @@ export async function processDocumentPipeline(
         if (ragConfig) {
           // RAG engine handles chunking + embedding internally — upload full page
           try {
-            await uploadPageToRagCorpus(
+            const ragFileId = await uploadPageToRagCorpus(
               ragConfig,
               crawledPage.title || crawledPage.url,
               crawledPage.contentText,
               crawledPage.url
             );
+            await db.update(pages).set({ ragFileId }).where(eq(pages.id, pageId));
             await appendLog(jobId, `Uploaded to RAG corpus: ${crawledPage.url}`);
           } catch (ragErr) {
             const ragMsg = ragErr instanceof Error ? ragErr.message : String(ragErr);
@@ -391,7 +392,8 @@ export async function processDocumentPipeline(
         let chunkCount = 0;
         if (ragConfig) {
           try {
-            await uploadPageToRagCorpus(ragConfig, file.title || fileUrl, file.contentText, fileUrl);
+            const ragFileId = await uploadPageToRagCorpus(ragConfig, file.title || fileUrl, file.contentText, fileUrl);
+            await db.update(pages).set({ ragFileId }).where(eq(pages.id, pageId));
             await appendLog(jobId, `Uploaded to RAG corpus: ${fileUrl}`);
           } catch (ragErr) {
             const ragMsg = ragErr instanceof Error ? ragErr.message : String(ragErr);
@@ -482,7 +484,8 @@ export async function processDocumentPipeline(
         let chunkCount = 0;
         if (ragConfig) {
           try {
-            await uploadPageToRagCorpus(ragConfig, crawledPage.title, crawledPage.contentText, crawledPage.url);
+            const ragFileId = await uploadPageToRagCorpus(ragConfig, crawledPage.title, crawledPage.contentText, crawledPage.url);
+            await db.update(pages).set({ ragFileId }).where(eq(pages.id, pageId));
             await appendLog(jobId, `Uploaded to RAG corpus: ${crawledPage.url}`);
           } catch (ragErr) {
             const ragMsg = ragErr instanceof Error ? ragErr.message : String(ragErr);
@@ -547,7 +550,8 @@ export async function processDocumentPipeline(
         let chunkCount = 0;
         if (ragConfig) {
           try {
-            await uploadPageToRagCorpus(ragConfig, crawledPage.title, crawledPage.contentText, crawledPage.url);
+            const ragFileId = await uploadPageToRagCorpus(ragConfig, crawledPage.title, crawledPage.contentText, crawledPage.url);
+            await db.update(pages).set({ ragFileId }).where(eq(pages.id, pageId));
             await appendLog(jobId, `Uploaded to RAG corpus: ${crawledPage.url}`);
           } catch (ragErr) {
             const ragMsg = ragErr instanceof Error ? ragErr.message : String(ragErr);

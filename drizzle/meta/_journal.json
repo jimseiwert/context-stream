@@ -36,6 +36,13 @@
       "when": 1773928900820,
       "tag": "0004_common_sir_ram",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1773930045109,
+      "tag": "0005_ancient_chronomancer",
+      "breakpoints": true
     }
   ]
 }
