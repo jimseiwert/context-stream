@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.0](https://github.com/jimseiwert/context-stream/compare/v1.0.0...v1.1.0) (2026-03-19)
+
+
+### Features
+
+* clean up RAG corpus files on document/source deletion ([604816f](https://github.com/jimseiwert/context-stream/commit/604816f6a5ac475e2aa31fe6fe7bfe79ab8c6a9f))
+* improve Add Source dialog UX for DOCUMENT and WEBSITE types ([4201a18](https://github.com/jimseiwert/context-stream/commit/4201a1872a4bce00a9a2e885555e20713585e1a0))
+* Vertex AI RAG Engine ingestion + per-source config overrides ([da71936](https://github.com/jimseiwert/context-stream/commit/da719363eba2ccb1134f7d51cd9b7b86305d4eaf))
+
 ## 1.0.0 (2026-03-17)
 
 
