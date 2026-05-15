@@ -54,7 +54,7 @@
     "@types/node-cron": "^3.0.11",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
-    "better-auth": "^1.5.5",
+    "better-auth": "^1.6.2",
     "bull": "^4.16.5",
     "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.0",
